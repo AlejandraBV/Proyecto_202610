@@ -65,9 +65,35 @@ class MessageCreate(BaseModel):
 class MessageResponse(MessageCreate):
     id: str
     timestamp: datetime
+    subject: Optional[str] = None
+    topic: Optional[str] = None
+    detected_content_type: Optional[str] = None
+    detection_confidence: Optional[float] = None
+    detection_method: Optional[str] = None
+    document_id: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+# Intelligent message routing (no dropdowns required)
+class MessageRequest(BaseModel):
+    user_prompt: str
+    conversation_id: Optional[str] = None
+    document_id: Optional[str] = None
+    difficulty: Optional[str] = None
+
+
+class RoutedMessageResponse(BaseModel):
+    conversation_id: str
+    is_new_conversation: bool
+    subject: Optional[str] = None
+    topic: Optional[str] = None
+    content_type: Optional[str] = None
+    confidence: float = 0.0
+    detection_method: Optional[str] = None
+    content: str
+    title: Optional[str] = None
 
 
 # Feedback Schemas
@@ -116,6 +142,9 @@ class ConversationResponse(BaseModel):
     title: str
     subject: Optional[str] = None
     topic: Optional[str] = None
+    primary_subject: Optional[str] = None
+    primary_topic: Optional[str] = None
+    all_topics: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     last_edited: Optional[datetime] = None

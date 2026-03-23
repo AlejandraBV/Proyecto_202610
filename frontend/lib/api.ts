@@ -7,7 +7,9 @@ import {
   SemanticSearchRequest,
   SemanticSearchResponse,
   LLMRequestWithContext,
-  RLMResponse
+  RLMResponse,
+  MessageRequest,
+  RoutedMessageResponse,
 } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -42,6 +44,19 @@ export const apiClient = {
   createConversation: (data: any) => api.post('/conversations', data),
   updateConversation: (id: string, data: any) => api.put(`/conversations/${id}`, data),
   deleteConversation: (id: string) => api.delete(`/conversations/${id}`),
+
+  /**
+   * Send a message with automatic topic detection.
+   * The backend runs the hybrid keyword+LLM analyzer and may auto-create a new
+   * conversation when the topic changes.
+   */
+  sendMessage: (request: MessageRequest): Promise<{ data: RoutedMessageResponse }> =>
+    api.post('/conversations/message', {
+      user_prompt: request.userPrompt,
+      conversation_id: request.conversationId ?? null,
+      document_id: request.documentId ?? null,
+      difficulty: request.difficulty ?? null,
+    }),
 
   // Content generation (legacy)
   generateContent: (conversationId: string, request: LLMRequest) =>
