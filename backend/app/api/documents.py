@@ -1,16 +1,17 @@
 """
 Document management and RAG pipeline endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 import uuid
 import os
 import tempfile
+from typing import Optional
 from app.core.database import get_db
 from app.core.security import decode_token
 from app.schemas import DocumentUpload, DocumentResponse, DocumentAnalysis
-from app.models.models import Document, User
+from app.models.models import Document, Chunk, User
 from app.orchestration.content_orchestrator import ContentOrchestrator
 from app.core.config import settings
 import logging
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-def get_current_user_id(token: str) -> str:
+def get_current_user_id(token: Optional[str]) -> str:
     """Extract user ID from token"""
     if not token or not token.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -39,7 +40,7 @@ async def upload_document(
     subject: str = None,
     topic: str = None,
     conversation_id: str = None,
-    authorization: str = None,
+    authorization: Optional[str] = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -253,7 +254,7 @@ async def delete_document(
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: str,
-    authorization: str = None,
+    authorization: Optional[str] = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific document by ID"""
@@ -283,10 +284,71 @@ async def get_document(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/{document_id}/chunks")
+async def get_document_chunks(
+    document_id: str,
+    authorization: Optional[str] = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retrieve the individual text chunks for a document.
+
+    Useful for debugging the RAG pipeline: inspect how the document was
+    chunked and what text each chunk contains.
+    """
+    try:
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Missing authorization")
+
+        user_id = get_current_user_id(authorization)
+
+        # Verify ownership
+        doc_result = await db.execute(
+            select(Document).filter(
+                Document.id == document_id,
+                Document.user_id == user_id,
+            )
+        )
+        document = doc_result.scalar_one_or_none()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # Fetch stored chunks
+        chunk_result = await db.execute(
+            select(Chunk)
+            .filter(Chunk.document_id == document_id)
+            .order_by(Chunk.chunk_index)
+        )
+        chunks = chunk_result.scalars().all()
+
+        return {
+            "document_id": document_id,
+            "filename": document.filename,
+            "total_chunks": len(chunks),
+            "chunks": [
+                {
+                    "id": c.id,
+                    "chunk_index": c.chunk_index,
+                    "text": c.text,
+                    "chunk_size": c.chunk_size,
+                    "overlap_info": c.overlap_info,
+                    "vector_id": c.vector_id,
+                }
+                for c in chunks
+            ],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching chunks for document {document_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/search/semantic")
 async def semantic_search(
     request: dict,
-    authorization: str = None,
+    authorization: Optional[str] = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Perform semantic search over indexed documents"""

@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.core.logger import setup_logging
-from app.api import auth_router, conversations_router, documents_router
+from app.api import auth_router, conversations_router, documents_router, feedback_router
 from app.api.health import router as health_router
 from app.middleware.cors_handler import setup_cors
 from app.middleware.error_handler import ErrorHandlerMiddleware
@@ -42,6 +42,7 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(conversations_router)
 app.include_router(documents_router)
+app.include_router(feedback_router)
 
 
 if __name__ == "__main__":

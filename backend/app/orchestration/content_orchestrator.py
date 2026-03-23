@@ -10,6 +10,7 @@ from app.agents.reviewer_agent import ReviewerAgent
 from app.agents.feedback_agent import FeedbackAgent
 from app.services.vector_service import VectorDatabaseService
 from app.services.document_ingestion_service import DocumentIngestor, SemanticChunker
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,12 @@ class ContentOrchestrator:
     2. Generator: Generates content based on analysis
     3. Reviewer: Validates content for difficulty, fidelity, requirements
     4. Loop: If review fails, go back to Generator with improvement instructions
+       (HITL: infinite retries when MAX_GENERATION_ATTEMPTS == 0)
     5. Feedback: Capture teacher feedback and update learning examples
     """
     
-    MAX_GENERATION_ATTEMPTS = 3  # Max times to regenerate if reviewer fails
+    # 0 means infinite retries (HITL), positive value caps retries
+    MAX_GENERATION_ATTEMPTS = settings.MAX_GENERATION_ATTEMPTS
     
     @staticmethod
     async def generate_with_rag_and_agents(
@@ -95,16 +98,18 @@ class ContentOrchestrator:
             
             logger.info(f"Analysis: {content_type}, difficulty: {inferred_difficulty}, context chunks: {len(retrieved_context)}")
             
-            # STEP 2-4: Generate with review loop
+            # STEP 2-4: Generate with review loop (HITL: infinite when MAX_GENERATION_ATTEMPTS == 0)
             # ====================================
             generated_content = None
             review_result = None
             attempt = 0
             improvement_instructions = ""
+            max_attempts = ContentOrchestrator.MAX_GENERATION_ATTEMPTS
             
-            while attempt < ContentOrchestrator.MAX_GENERATION_ATTEMPTS:
+            while True:
                 attempt += 1
-                logger.info(f"Generation attempt {attempt}/{ContentOrchestrator.MAX_GENERATION_ATTEMPTS}")
+                attempt_label = f"{attempt}" if max_attempts == 0 else f"{attempt}/{max_attempts}"
+                logger.info(f"Generation attempt {attempt_label}")
                 
                 # Generate content
                 generated_content = await GeneratorAgent.generate(
@@ -135,12 +140,17 @@ class ContentOrchestrator:
                 if not review_result["needs_regeneration"]:
                     logger.info("Content approved by reviewer")
                     break
-                else:
-                    # Build instructions for next attempt
-                    improvement_instructions = "\n\nImprovement feedback: " + "\n".join(
-                        review_result.get("improvement_suggestions", [])
-                    )
-                    logger.info(f"Content needs revision. Suggestions: {improvement_instructions}")
+                
+                # Build instructions for next attempt
+                improvement_instructions = "\n\nImprovement feedback: " + "\n".join(
+                    review_result.get("improvement_suggestions", [])
+                )
+                logger.info(f"Content needs revision. Suggestions: {improvement_instructions}")
+                
+                # Stop if capped (max_attempts > 0) and limit reached
+                if max_attempts > 0 and attempt >= max_attempts:
+                    logger.info(f"Reached max attempts ({max_attempts}), using best content so far")
+                    break
             
             # STEP 5: Prepare result
             # =====================

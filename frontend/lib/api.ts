@@ -93,8 +93,25 @@ export const apiClient = {
   uploadFromUrl: (url: string, request: DocumentUploadRequest): Promise<{ data: DocumentUploadResponse }> =>
     api.post('/documents/fetch-url', { url, ...request }),
 
+  // Regenerate content with teacher feedback (infinite HITL retries)
+  regenerateContent: (conversationId: string, contentId: string, feedbackText: string) =>
+    api.post(`/conversations/${conversationId}/regenerate`, {
+      content_id: contentId,
+      feedback_text: feedbackText,
+    }),
+
+  // Submit feedback on generated content (standalone endpoint)
+  submitContentFeedback: (
+    contentId: string,
+    feedback: string,
+    status: 'approved' | 'needs_revision' | 'rejected',
+    editorName?: string,
+  ) =>
+    api.post(`/feedback/${contentId}`, { feedback, status, editor_name: editorName }),
+
+  // Fetch chunks for a document (for debugging RAG)
   getDocumentChunks: (documentId: string) =>
-    api.get(`/documents/chunks/${documentId}`),
+    api.get(`/documents/${documentId}/chunks`),
 
   semanticSearch: (request: SemanticSearchRequest): Promise<{ data: SemanticSearchResponse }> =>
     api.post('/documents/search/semantic', request),

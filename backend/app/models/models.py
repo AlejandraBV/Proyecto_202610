@@ -82,6 +82,10 @@ class GeneratedContent(Base):
     content = Column(Text, nullable=False)
     feedback = Column(Text, nullable=True)
     version = Column(Integer, default=1)
+    # Tracks total HITL regeneration cycles (no upper limit)
+    total_regeneration_attempts = Column(Integer, default=0)
+    # Score from the last reviewer pass
+    review_score = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
