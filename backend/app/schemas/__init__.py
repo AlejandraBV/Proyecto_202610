@@ -1,18 +1,23 @@
-# Schemas init
 from app.schemas.schemas import (
-    UserCreate, UserResponse, TokenResponse, 
-    ConversationCreate, ConversationResponse,
+    UserCreate, UserResponse, TokenResponse, TokenData,
+    ConversationCreate, ConversationUpdate, ConversationResponse,
     MessageCreate, MessageResponse,
-    GeneratedContentResponse,
+    GeneratedContentResponse, FeedbackRecordResponse,
     LLMRequest, LLMResponse,
-    FeedbackSubmit,
+    FeedbackSubmit, RegenerationRequest,
+    DocumentUpload, DocumentResponse, DocumentAnalysis,
+    GenerationRequest, GenerationResponse,
+    VectorSearchRequest, VectorSearchResult,
 )
 
 __all__ = [
-    "UserCreate", "UserResponse", "TokenResponse",
-    "ConversationCreate", "ConversationResponse", 
+    "UserCreate", "UserResponse", "TokenResponse", "TokenData",
+    "ConversationCreate", "ConversationUpdate", "ConversationResponse",
     "MessageCreate", "MessageResponse",
-    "GeneratedContentResponse",
+    "GeneratedContentResponse", "FeedbackRecordResponse",
     "LLMRequest", "LLMResponse",
-    "FeedbackSubmit",
+    "FeedbackSubmit", "RegenerationRequest",
+    "DocumentUpload", "DocumentResponse", "DocumentAnalysis",
+    "GenerationRequest", "GenerationResponse",
+    "VectorSearchRequest", "VectorSearchResult",
 ]
