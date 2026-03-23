@@ -1,0 +1,16 @@
+.env
+.env.local
+*.pyc
+__pycache__/
+.DS_Store
+node_modules/
+.next/
+build/
+dist/
+chromadb_data/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.vscode/
+.idea/

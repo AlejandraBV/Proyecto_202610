@@ -1,0 +1,3 @@
+"""
+Core config init
+"""
