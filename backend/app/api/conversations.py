@@ -15,7 +15,7 @@ from app.core.database import get_db
 from app.core.security import decode_token
 from app.schemas import (
     ConversationCreate, ConversationUpdate, ConversationResponse,
-    MessageCreate, MessageResponse,
+    MessageCreate, MessageResponse, MessageRequest, RoutedMessageResponse,
     GeneratedContentResponse, GenerationRequest, GenerationResponse,
     FeedbackSubmit, RegenerationRequest,
 )
@@ -24,6 +24,7 @@ from app.models.models import (
 )
 from app.orchestration.content_orchestrator import ContentOrchestrator
 from app.agents.feedback_agent import FeedbackAgent
+from app.services.conversation_service import ConversationService
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +185,114 @@ async def delete_conversation(
 
     await db.delete(conversation)
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Intelligent message routing (auto topic detection)
+# ---------------------------------------------------------------------------
+
+@router.post("/message", response_model=RoutedMessageResponse, status_code=status.HTTP_200_OK)
+async def send_message(
+    request: MessageRequest,
+    authorization: Optional[str] = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send a message with automatic topic detection.
+
+    The backend:
+    1. Runs the hybrid keyword+LLM analyzer to detect subject, topic, content_type.
+    2. Compares the detected topic with the current conversation's topic.
+    3. If the topic changed (or no conversation exists), a new conversation is created.
+    4. Generates a response using the LLM pipeline.
+    5. Returns routing info + generated content so the frontend can seamlessly
+       switch to the new conversation when the topic changes.
+    """
+    user_id = get_current_user_id(authorization)
+
+    routing = await ConversationService.process_message_and_route(
+        user_id=user_id,
+        user_prompt=request.user_prompt,
+        db=db,
+        conversation_id=request.conversation_id,
+        document_id=request.document_id,
+    )
+
+    conversation_id = routing["conversation_id"]
+
+    # Persist the user message with detected metadata
+    user_msg = Message(
+        id=str(uuid.uuid4()),
+        conversation_id=conversation_id,
+        role="user",
+        content=request.user_prompt,
+        subject=routing.get("subject"),
+        topic=routing.get("topic"),
+        detected_content_type=routing.get("content_type"),
+        detection_confidence=routing.get("confidence", 0.0),
+        detection_method=routing.get("detection_method"),
+        document_id=request.document_id,
+    )
+    db.add(user_msg)
+
+    # Generate content via the RAG + agent pipeline
+    try:
+        generation_result = await ContentOrchestrator.generate_with_rag_and_agents(
+            conversation_id=conversation_id,
+            user_prompt=request.user_prompt,
+            subject=routing.get("subject") or "General",
+            topic=routing.get("topic") or "General",
+            level=request.difficulty or "intermediate",
+            user_id=user_id,
+            db=db,
+        )
+        generated_content_text = generation_result.get("content", "")
+        content_type = generation_result.get("content_type") or routing.get("content_type") or "text"
+    except Exception as exc:
+        logger.error("Content generation failed for conversation %s: %s", conversation_id, exc)
+        generated_content_text = ""
+        content_type = routing.get("content_type") or "text"
+
+    # Persist the assistant response
+    assistant_msg = Message(
+        id=str(uuid.uuid4()),
+        conversation_id=conversation_id,
+        role="assistant",
+        content=generated_content_text,
+        content_type=content_type,
+        subject=routing.get("subject"),
+        topic=routing.get("topic"),
+        detected_content_type=content_type,
+    )
+    db.add(assistant_msg)
+
+    # Update conversation timestamps
+    conv_result = await db.execute(
+        select(Conversation).filter(Conversation.id == conversation_id)
+    )
+    conversation = conv_result.scalar_one_or_none()
+    if conversation:
+        now = datetime.utcnow()
+        conversation.updated_at = now
+        conversation.last_edited = now
+
+    await db.commit()
+
+    subject = routing.get("subject")
+    topic = routing.get("topic")
+    title = f"{subject or 'General'} - {topic or 'Untitled'}"
+
+    return RoutedMessageResponse(
+        conversation_id=conversation_id,
+        is_new_conversation=routing["is_new_conversation"],
+        subject=subject,
+        topic=topic,
+        content_type=content_type,
+        confidence=routing.get("confidence", 0.0),
+        detection_method=routing.get("detection_method"),
+        content=generated_content_text,
+        title=title,
+    )
 
 
 # ---------------------------------------------------------------------------

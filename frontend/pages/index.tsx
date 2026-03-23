@@ -7,43 +7,43 @@ import { ChatInput } from '@/components/ChatInput';
 import { useAppStore } from '@/store/appStore';
 import { useConversations } from '@/hooks/useApi';
 import { apiClient } from '@/lib/api';
+import { ConversationThread, ContentType, DetectedMetadata } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 
 const Dashboard: React.FC = () => {
   const router = useRouter();
   const [inputValue, setInputValue] = useState('');
+  const [detectedMetadata, setDetectedMetadata] = useState<DetectedMetadata | null>(null);
   const {
     conversations,
     currentConversation,
     setConversations,
     setCurrentConversation,
     addMessage,
+    addConversation,
+    updateConversation,
     loading,
     setLoading,
   } = useAppStore();
-  const { fetchConversations, createConversation } = useConversations();
+  const { fetchConversations } = useConversations();
 
   useEffect(() => {
     fetchConversations();
   }, []);
 
-  const handleNewConversation = async () => {
-    try {
-      const newConv = await createConversation({
-        title: 'New Conversation',
-        subject: 'General',
-        topic: 'Untitled',
-      });
-      setCurrentConversation(newConv);
-    } catch (error) {
-      toast.error('Failed to create conversation');
-    }
+  const handleNewConversation = () => {
+    // With auto-topic detection, a new conversation is created automatically
+    // when the user sends a message on a new topic. The user just needs to clear
+    // the current conversation selection so the next message starts fresh.
+    setCurrentConversation(null);
+    setDetectedMetadata(null);
   };
 
   const handleSelectConversation = (id: string) => {
     const conv = conversations.find((c) => c.id === id);
     setCurrentConversation(conv || null);
+    setDetectedMetadata(null);
   };
 
   const handleDeleteConversation = async (id: string) => {
@@ -61,51 +61,97 @@ const Dashboard: React.FC = () => {
   };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || !currentConversation) return;
+    if (!inputValue.trim()) return;
 
-    const userMessage = {
-      id: uuidv4(),
-      role: 'user' as const,
-      content: inputValue,
-      timestamp: new Date().toISOString(),
-    };
-
-    addMessage(currentConversation.id, userMessage);
+    const prompt = inputValue;
     setInputValue('');
     setLoading(true);
 
+    // Add optimistic user message to the current conversation (if any)
+    const tempUserMessage = {
+      id: uuidv4(),
+      role: 'user' as const,
+      content: prompt,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (currentConversation) {
+      addMessage(currentConversation.id, tempUserMessage);
+    }
+
     try {
-      // Use RAG-powered content generation
-      const response = await apiClient.generateContentWithRAG(currentConversation.id, {
-        prompt: inputValue,
-        contentType: 'text', // Could be dynamic based on user input analysis
-        subject: currentConversation.subject,
-        topic: currentConversation.topic,
-        level: 'university', // Could be dynamic
-        retrievedContext: [], // Will be filled by backend RAG pipeline
-        fewShotExamples: [], // Will be retrieved by backend
+      const response = await apiClient.sendMessage({
+        userPrompt: prompt,
+        conversationId: currentConversation?.id ?? null,
       });
 
-      const assistantMessage = {
-        id: uuidv4(),
-        role: 'assistant' as const,
-        content: response.data.content,
-        timestamp: new Date().toISOString(),
-        contentType: response.data.contentType,
-        retrievedChunks: response.data.retrievedChunks,
-        agentDecisions: response.data.agentDecisions,
-      };
+      const data = response.data;
 
-      addMessage(currentConversation.id, assistantMessage);
+      // Store auto-detected metadata for display
+      setDetectedMetadata({
+        subject: data.subject,
+        topic: data.topic,
+        contentType: data.contentType,
+        confidence: data.confidence,
+        detectionMethod: data.detectionMethod as any,
+      });
 
-      // Show success message with RAG info
-      const chunksUsed = response.data.retrievedChunks?.length || 0;
-      const iterations = response.data.iterations || 1;
-      toast.success(
-        `Content generated using ${chunksUsed} source chunks (${iterations} iteration${iterations > 1 ? 's' : ''})`
-      );
+      if (data.isNewConversation) {
+        // The topic changed (or there was no conversation) – add the new one to the store
+        const newConv: ConversationThread = {
+          id: data.conversationId,
+          title: data.title || `${data.subject || 'General'} - ${data.topic || 'Untitled'}`,
+          subject: data.subject || 'General',
+          topic: data.topic || 'Untitled',
+          primarySubject: data.subject || undefined,
+          primaryTopic: data.topic || undefined,
+          userId: '',
+          messages: [
+            { ...tempUserMessage },
+            {
+              id: uuidv4(),
+              role: 'assistant' as const,
+              content: data.content,
+              timestamp: new Date().toISOString(),
+              contentType: (data.contentType as ContentType) || 'text',
+            },
+          ],
+          generatedContent: [],
+          documents: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        addConversation(newConv);
+        setCurrentConversation(newConv);
+
+        const label = data.subject && data.topic
+          ? `${data.subject} – ${data.topic}`
+          : 'new topic';
+        toast.success(`Started new conversation: ${label}`, { duration: 3000 });
+      } else {
+        // Same topic – add the assistant reply to the existing conversation
+        const assistantMessage = {
+          id: uuidv4(),
+          role: 'assistant' as const,
+          content: data.content,
+          timestamp: new Date().toISOString(),
+          contentType: (data.contentType as any) || 'text',
+        };
+        addMessage(data.conversationId, assistantMessage);
+
+        // Update conversation metadata if we have a better title now
+        if (data.subject && data.topic) {
+          updateConversation(data.conversationId, {
+            subject: data.subject,
+            topic: data.topic,
+            primarySubject: data.subject,
+            primaryTopic: data.topic,
+          });
+        }
+      }
     } catch (error) {
-      toast.error('Failed to generate content with RAG');
+      toast.error('Failed to send message');
       console.error(error);
     } finally {
       setLoading(false);
@@ -130,8 +176,9 @@ const Dashboard: React.FC = () => {
         value={inputValue}
         onChange={setInputValue}
         onSubmit={handleSendMessage}
-        disabled={!currentConversation || loading}
+        disabled={loading}
         loading={loading}
+        detectedMetadata={detectedMetadata}
       />
     </Layout>
   );

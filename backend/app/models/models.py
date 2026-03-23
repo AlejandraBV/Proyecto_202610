@@ -32,6 +32,11 @@ class Conversation(Base):
     title = Column(String(255), nullable=False)
     subject = Column(String(255), nullable=True)
     topic = Column(String(255), nullable=True)
+    # Auto-detected primary subject/topic (mirrors subject/topic for compatibility)
+    primary_subject = Column(String(255), nullable=True)
+    primary_topic = Column(String(255), nullable=True)
+    # JSON list of all topics discussed in this conversation
+    all_topics = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_edited = Column(DateTime, nullable=True)
@@ -52,6 +57,16 @@ class Message(Base):
     content = Column(Text, nullable=False)
     content_type = Column(String(50), nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+    # Auto-detected metadata
+    subject = Column(String(255), nullable=True)
+    topic = Column(String(255), nullable=True)
+    detected_content_type = Column(String(50), nullable=True)
+    detection_confidence = Column(Float, default=0.0)
+    detection_method = Column(String(50), nullable=True)  # "keywords", "llm", or "document"
+
+    # Optional reference to an uploaded document
+    document_id = Column(String(36), nullable=True)
     
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")

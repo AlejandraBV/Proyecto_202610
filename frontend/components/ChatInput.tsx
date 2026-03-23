@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { MessageCircle, Send, Plus, Loader, Upload, Link, FileText } from 'lucide-react';
 import { useDocuments } from '@/hooks/useApi';
 import { useAppStore } from '@/store/appStore';
-import { DocumentUploadRequest } from '@/types';
+import { DocumentUploadRequest, DetectedMetadata } from '@/types';
 import toast from 'react-hot-toast';
 
 interface ChatInputProps {
@@ -12,6 +12,8 @@ interface ChatInputProps {
   onFileUpload?: (file: File) => void;
   disabled?: boolean;
   loading?: boolean;
+  /** Auto-detected topic metadata returned by the backend after the last send */
+  detectedMetadata?: DetectedMetadata | null;
 }
 
 interface UploadModalProps {
@@ -185,6 +187,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onFileUpload,
   disabled = false,
   loading = false,
+  detectedMetadata,
 }) => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const { uploadDocument, uploadFromUrl } = useDocuments();
@@ -247,6 +250,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <p className="mt-2 text-center text-xs text-gray-500">
             Upload documents for enhanced RAG-powered content generation. Your data is private and secure.
           </p>
+
+          {/* Auto-detected metadata badge */}
+          {detectedMetadata && (detectedMetadata.subject || detectedMetadata.topic) && (
+            <div className="mt-2 flex items-center justify-center gap-1 text-xs text-primary">
+              <span>📚</span>
+              {detectedMetadata.subject && <span>{detectedMetadata.subject}</span>}
+              {detectedMetadata.subject && detectedMetadata.topic && <span>•</span>}
+              {detectedMetadata.topic && <span>{detectedMetadata.topic}</span>}
+              {detectedMetadata.contentType && (
+                <>
+                  <span>•</span>
+                  <span className="capitalize">{detectedMetadata.contentType}</span>
+                </>
+              )}
+              {detectedMetadata.detectionMethod && (
+                <span className="ml-1 text-gray-400">
+                  (via {detectedMetadata.detectionMethod})
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
