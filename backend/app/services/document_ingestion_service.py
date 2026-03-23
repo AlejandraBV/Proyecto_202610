@@ -257,8 +257,24 @@ class DocumentIngestionService:
         return f"Content from {url}"
 
     async def chunk_text_semantic(self, text: str, overlap: float = 0.15) -> List[Dict]:
-        """Chunk text semantically with overlap"""
-        return await self.chunker.chunk_text(text, overlap)
+        """Chunk text semantically with overlap.
+
+        Returns a list of dicts with 'text', 'chunk_size', and 'overlap_info' keys.
+        """
+        raw_chunks = SemanticChunker.chunk_text(text, overlap_percentage=overlap)
+        result = []
+        for idx, chunk in enumerate(raw_chunks):
+            result.append({
+                "text": chunk,
+                "chunk_size": len(chunk),
+                "overlap_info": {
+                    "has_overlap": idx > 0,
+                    "overlap_percentage": overlap,
+                    "chunk_index": idx,
+                    "total_chunks": len(raw_chunks),
+                },
+            })
+        return result
 
     async def vectorize_chunks(self, chunks: List[Dict]) -> List[Dict]:
         """Vectorize chunks using embedding model"""

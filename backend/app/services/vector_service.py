@@ -217,3 +217,82 @@ class VectorDatabaseService:
         context = "\n\n---\n\n".join([r["content"] for r in results["results"]])
         
         return context
+
+
+class VectorService:
+    """
+    Instance-based wrapper for VectorDatabaseService.
+    Provides instance methods for easier testing and dependency injection.
+    """
+
+    @staticmethod
+    def _extract_chunk_text(chunk) -> str:
+        """Normalize a chunk to its text content, accepting both str and dict."""
+        if isinstance(chunk, dict):
+            return chunk.get("text", "")
+        return str(chunk)
+
+    def _get_collection(self, name: str = "academic_content"):
+        """Get ChromaDB collection"""
+        return VectorDatabaseService.get_collection(name)
+
+    async def retrieve_similar_chunks(
+        self,
+        query: str,
+        n_results: int = 5,
+        subject: str = None,
+        topic: str = None,
+    ) -> list:
+        """
+        Retrieve similar chunks from ChromaDB.
+
+        Args:
+            query: Query string for similarity search
+            n_results: Number of results to return
+            subject: Optional subject filter
+            topic: Optional topic filter
+
+        Returns:
+            List of dicts with 'text' and 'score' keys
+        """
+        where_filter = {}
+        if subject:
+            where_filter["subject"] = subject
+        if topic:
+            where_filter["topic"] = topic
+
+        collection = self._get_collection()
+        query_result = collection.query(
+            query_texts=[query],
+            n_results=n_results,
+            where=where_filter if where_filter else None,
+        )
+
+        results = []
+        documents = query_result.get("documents", [[]])[0]
+        distances = query_result.get("distances", [[]])[0]
+        metadatas = query_result.get("metadatas", [[]])[0]
+
+        for doc, dist, meta in zip(documents, distances, metadatas):
+            results.append({
+                "text": doc,
+                "score": 1.0 - dist if dist is not None else 0.5,
+                "metadata": meta,
+            })
+
+        return results
+
+    async def add_chunks(
+        self,
+        document_id: str,
+        chunks: list,
+        subject: str = None,
+        topic: str = None,
+    ) -> dict:
+        """Add document chunks to ChromaDB"""
+        return await VectorDatabaseService.ingest_document(
+            document_id=document_id,
+            content="\n\n".join(VectorService._extract_chunk_text(c) for c in chunks),
+            subject=subject,
+            topic=topic,
+        )

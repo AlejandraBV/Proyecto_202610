@@ -107,3 +107,37 @@ class Document(Base):
     # Relationships
     user = relationship("User", back_populates="documents")
     conversation = relationship("Conversation", back_populates="documents")
+
+
+class Chunk(Base):
+    """Stores individual text chunks from ingested documents for RAG retrieval"""
+    __tablename__ = "chunks"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id = Column(String(36), ForeignKey("documents.id"), nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    text = Column(Text, nullable=False)
+    chunk_size = Column(Integer, default=0)
+    overlap_info = Column(Text, nullable=True)
+    vector_id = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    document = relationship("Document", backref="chunks")
+
+
+class AgentDecisionRecord(Base):
+    """Stores decisions made by agents during content generation"""
+    __tablename__ = "agent_decision_records"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversation_id = Column(String(36), ForeignKey("conversations.id"), nullable=False)
+    agent_name = Column(String(100), nullable=False)
+    decision = Column(String(50), nullable=False)
+    reasoning = Column(Text, nullable=True)
+    quality_score = Column(Float, nullable=True)
+    iteration = Column(Integer, default=1)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    conversation = relationship("Conversation", backref="agent_decisions")

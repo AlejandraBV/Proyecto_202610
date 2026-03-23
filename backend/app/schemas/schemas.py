@@ -21,7 +21,7 @@ class UserResponse(UserBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -50,7 +50,7 @@ class DocumentResponse(BaseModel):
     chunks_count: int
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -65,7 +65,34 @@ class MessageCreate(BaseModel):
 class MessageResponse(MessageCreate):
     id: str
     timestamp: datetime
-    
+
+    class Config:
+        from_attributes = True
+
+
+# Feedback Schemas
+class FeedbackRecordResponse(BaseModel):
+    id: str
+    feedback: str
+    status: str
+    editor_name: Optional[str] = None
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GeneratedContentResponse(BaseModel):
+    id: str
+    content_type: str
+    title: str
+    content: str
+    feedback: Optional[str] = None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+    feedback_records: List[FeedbackRecordResponse] = []
+
     class Config:
         from_attributes = True
 
@@ -93,46 +120,20 @@ class ConversationResponse(BaseModel):
     updated_at: datetime
     last_edited: Optional[datetime] = None
     messages: List[MessageResponse] = []
-    generated_contents: List['GeneratedContentResponse'] = []
-    
+    generated_contents: List[GeneratedContentResponse] = []
+
     class Config:
         from_attributes = True
 
 
-# Generated Content Schemas
-class FeedbackRecordResponse(BaseModel):
-    id: str
-    feedback: str
-    status: str
-    editor_name: Optional[str] = None
-    timestamp: datetime
-    
-    class Config:
-        from_attributes = True
-
-
-class GeneratedContentResponse(BaseModel):
-    id: str
-    content_type: str
-    title: str
-    content: str
-    feedback: Optional[str] = None
-    version: int
-    created_at: datetime
-    updated_at: datetime
-    feedback_records: List[FeedbackRecordResponse] = []
-    
-    class Config:
-        from_attributes = True
-
-
-# LLM Request & Response Schemas
+# LLM Request/Response Schemas
 class LLMRequest(BaseModel):
     content_type: str  # "exam", "slideshow", "guide", "question", "text"
     subject: str
     topic: str
-    level: str
+    level: str  # "beginner", "intermediate", "advanced", "expert"
     additional_context: Optional[str] = None
+    previous_feedback: Optional[str] = None
     include_document: bool = False
     document_id: Optional[str] = None
 
@@ -144,7 +145,7 @@ class LLMResponse(BaseModel):
     confidence: float
 
 
-# Feedback Schemas
+# Feedback Submit Schema
 class FeedbackSubmit(BaseModel):
     feedback: str
     status: str  # "approved", "needs_revision", "rejected"
@@ -205,33 +206,3 @@ class VectorSearchResult(BaseModel):
     content: str
     metadata: Dict[str, Any]
     relevance_score: Optional[float] = None
-    version: int
-    created_at: datetime
-    updated_at: datetime
-    feedback_history: List[FeedbackRecordResponse] = []
-    
-    class Config:
-        from_attributes = True
-
-
-# LLM Request/Response Schemas
-class LLMRequest(BaseModel):
-    content_type: str  # "exam", "slideshow", "guide", "question", "text"
-    subject: str
-    topic: str
-    level: str  # "elementary", "secondary", "university", "professional"
-    additional_context: Optional[str] = None
-    previous_feedback: Optional[str] = None
-
-
-class LLMResponse(BaseModel):
-    generated_content: str
-    content_type: str
-    suggested_title: str
-    confidence: float
-
-
-# Feedback Schemas
-class FeedbackSubmit(BaseModel):
-    feedback: str
-    status: str  # "approved", "needs_revision", "rejected"

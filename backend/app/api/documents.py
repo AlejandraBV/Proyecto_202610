@@ -248,3 +248,88 @@ async def delete_document(
     except Exception as e:
         logger.error(f"Error deleting document: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{document_id}", response_model=DocumentResponse)
+async def get_document(
+    document_id: str,
+    authorization: str = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a specific document by ID"""
+    try:
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Missing authorization")
+
+        user_id = get_current_user_id(authorization)
+
+        result = await db.execute(
+            select(Document).filter(
+                Document.id == document_id,
+                Document.user_id == user_id,
+            )
+        )
+        document = result.scalar_one_or_none()
+
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        return document
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/search/semantic")
+async def semantic_search(
+    request: dict,
+    authorization: str = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Perform semantic search over indexed documents"""
+    try:
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Missing authorization")
+
+        from app.services.vector_service import VectorDatabaseService
+
+        query = request.get("query", "")
+        subject = request.get("subject")
+        topic = request.get("topic")
+        limit = request.get("limit", 5)
+
+        results = await VectorDatabaseService.query(
+            query_text=query,
+            n_results=limit,
+            where_filter={"subject": subject} if subject else None,
+        )
+
+        chunks = []
+        for idx, (doc, meta) in enumerate(
+            zip(
+                results.get("results", []),
+                results.get("metadatas", [{}] * limit),
+            )
+        ):
+            chunks.append({
+                "chunkIndex": idx,
+                "text": doc.get("content", ""),
+                "chunkSize": len(doc.get("content", "")),
+                "similarityScore": doc.get("relevance_score", 0.0),
+                "metadata": meta,
+            })
+
+        return {
+            "chunks": chunks,
+            "totalFound": len(chunks),
+            "query": query,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during semantic search: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
