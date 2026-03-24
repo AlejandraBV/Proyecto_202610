@@ -1,7 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import {
   LLMRequest,
-  LLMResponse,
   DocumentUploadRequest,
   DocumentUploadResponse,
   SemanticSearchRequest,

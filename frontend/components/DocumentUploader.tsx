@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, FileText, Link, X } from 'lucide-react';
+import { Upload, FileText, X } from 'lucide-react';
 import { useDocumentUpload } from '@/hooks/useDocumentUpload';
 
 interface DocumentUploaderProps {

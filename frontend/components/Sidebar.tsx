@@ -1,5 +1,4 @@
 import React from 'react';
-import Link from 'next/link';
 import { ConversationThread } from '@/types';
 import { Trash2, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';

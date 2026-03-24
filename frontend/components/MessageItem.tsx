@@ -154,12 +154,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, isLoading = f
                 ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2" {...props} />,
                 ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2" {...props} />,
                 li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-                code: ({ node, inline, ...props }) =>
-                  inline ? (
+                code: ({ node, ...props }) => {
+                  const isInline = !String(props.children).includes('\n');
+                  return isInline ? (
                     <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm" {...props} />
                   ) : (
                     <code className="block bg-gray-900 text-gray-100 p-3 rounded mb-2 overflow-x-auto" {...props} />
-                  ),
+                  );
+                },
               }}
             >
               {message.content}

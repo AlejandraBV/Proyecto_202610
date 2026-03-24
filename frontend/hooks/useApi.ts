@@ -17,7 +17,7 @@ export const useApi = () => {
 
 export const useConversations = () => {
   const { setLoading, setError } = useAppStore();
-  const { setConversations, addConversation, updateConversation } = useAppStore();
+  const { setConversations, addConversation } = useAppStore();
 
   const fetchConversations = useCallback(async () => {
     try {

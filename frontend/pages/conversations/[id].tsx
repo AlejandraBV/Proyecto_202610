@@ -5,7 +5,6 @@ import { Sidebar } from '@/components/Sidebar';
 import { ContentEditor } from '@/components/ContentEditor';
 import { FeedbackPanel } from '@/components/FeedbackPanel';
 import { ContentPreview } from '@/components/ContentPreview';
-import { RegenerationButton } from '@/components/RegenerationButton';
 import { useAppStore } from '@/store/appStore';
 import { useConversations } from '@/hooks/useApi';
 import { useFeedback } from '@/hooks/useFeedback';
