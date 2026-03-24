@@ -34,8 +34,8 @@ export const apiClient = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
 
-  register: (email: string, password: string, name: string, institution: string) =>
-    api.post('/auth/register', { email, password, name, institution }),
+  register: (email: string, password: string, name: string) =>
+    api.post('/auth/register', { email, password, name }),
 
   // Conversations
   getConversations: () => api.get('/conversations'),

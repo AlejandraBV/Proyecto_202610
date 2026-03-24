@@ -10,7 +10,6 @@ const Register: React.FC = () => {
     email: '',
     password: '',
     name: '',
-    institution: '',
   });
   const [loading, setLoading] = useState(false);
 
@@ -29,8 +28,7 @@ const Register: React.FC = () => {
       await apiClient.register(
         formData.email,
         formData.password,
-        formData.name,
-        formData.institution
+        formData.name
       );
       toast.success('Registration successful! Please login.');
       router.push('/login');
@@ -59,19 +57,6 @@ const Register: React.FC = () => {
               required
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="John Doe"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Institution</label>
-            <input
-              type="text"
-              name="institution"
-              value={formData.institution}
-              onChange={handleChange}
-              required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="Your University"
             />
           </div>
 
