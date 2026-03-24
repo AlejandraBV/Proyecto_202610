@@ -6,7 +6,7 @@ interface ScrollAreaProps {
 }
 
 export const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
-  ({ children, className = '' }, ref) => {
+  ({ children, className = '' }, _ref) => {
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {

@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { MessageCircle, Send, Plus, Loader, Upload, Link, FileText } from 'lucide-react';
+import { Send, Plus, Loader, Upload, Link, FileText } from 'lucide-react';
 import { useDocuments } from '@/hooks/useApi';
-import { useAppStore } from '@/store/appStore';
 import { DocumentUploadRequest, DetectedMetadata } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -184,7 +183,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   value,
   onChange,
   onSubmit,
-  onFileUpload,
   disabled = false,
   loading = false,
   detectedMetadata,

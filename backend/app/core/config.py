@@ -32,7 +32,8 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: float = 0.12  # 12% overlap as per spec
     
     # Generation
-    MAX_GENERATION_ATTEMPTS: int = 3
+    # Set to 0 for infinite HITL retries; any positive value caps retries
+    MAX_GENERATION_ATTEMPTS: int = 0
     GENERATION_TIMEOUT: int = 60  # seconds
     
     # App settings
