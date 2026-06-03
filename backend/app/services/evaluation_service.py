@@ -46,9 +46,13 @@ def evaluate(
     c_tokens = _tokenize(retrieved_context) if retrieved_context else set()
 
     # ── Answer Relevance ──────────────────────────────────────────────────────
-    # Jaccard similarity between query and answer token sets.
+    # Recall: what fraction of query key-terms appear in the answer?
+    # Jaccard (intersection/union) always collapses to ~0 because the answer
+    # is orders of magnitude longer than the query, making the union huge.
+    # Recall (intersection/|query|) directly measures whether the answer
+    # actually addresses what was asked.
     if q_tokens and a_tokens:
-        ar_score = len(q_tokens & a_tokens) / len(q_tokens | a_tokens)
+        ar_score = len(q_tokens & a_tokens) / len(q_tokens)
     else:
         ar_score = 0.0
 
