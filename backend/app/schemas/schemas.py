@@ -170,25 +170,6 @@ class ConversationResponse(BaseModel):
         from_attributes = True
 
 
-# LLM Request/Response Schemas
-class LLMRequest(BaseModel):
-    content_type: str  # "exam", "slideshow", "guide", "question", "text"
-    subject: str
-    topic: str
-    level: str  # "beginner", "intermediate", "advanced", "expert"
-    additional_context: Optional[str] = None
-    previous_feedback: Optional[str] = None
-    include_document: bool = False
-    document_id: Optional[str] = None
-
-
-class LLMResponse(BaseModel):
-    generated_content: str
-    content_type: str
-    suggested_title: str
-    confidence: float
-
-
 # Feedback Submit Schema
 class FeedbackSubmit(BaseModel):
     feedback: str
@@ -239,22 +220,7 @@ class GenerationResponse(BaseModel):
     bloom_tags: Optional[List[BloomTag]] = None
 
 
-# Vector Search Schemas
-class VectorSearchRequest(BaseModel):
-    query: str
-    subject: Optional[str] = None
-    topic: Optional[str] = None
-    top_k: int = 5
-
-
-class VectorSearchResult(BaseModel):
-    content: str
-    metadata: Dict[str, Any]
-    relevance_score: Optional[float] = None
-
-
-# Folder Schemas - para organizar conversaciones por tema
-# HITL Schemas
+# Folder / HITL Schemas
 
 class MessageRateRequest(BaseModel):
     """Rate a single assistant message: +1 (helpful) or -1 (not helpful)."""

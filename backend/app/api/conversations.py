@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Header
-from fastapi.responses import StreamingResponse
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select

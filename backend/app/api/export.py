@@ -32,6 +32,56 @@ def _user_from_token(authorization: Optional[str]) -> str:
     return str(payload["sub"])
 
 
+_PREAMBLE_PATTERNS = re.compile(
+    r"^("
+    # English openers
+    r"here('s| is) (a |an |the )?"
+    r"|below (is|you('ll)? find)"
+    r"|the following (is|are|contains)"
+    r"|i('ve| have) (created|generated|prepared|written)"
+    r"|i('ll| will) (create|generate|provide)"
+    r"|sure[,!]? here"
+    r"|certainly[,!]? here"
+    r"|based on (the |your )?(provided )?(material|document|content|information)"
+    # Spanish openers
+    r"|aqu[íi] (te |tienes?)"
+    r"|a continuaci[oó]n"
+    r"|claro[,!]? aqu[íi]"
+    r"|por supuesto[,!]?"
+    r"|con gusto[,!]?"
+    r"|basad[oa] (en|exclusivamente)"
+    r"|el siguiente|la siguiente"
+    r"|te presento"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _strip_preamble(text: str) -> str:
+    """Remove the leading LLM meta-commentary sentence before the real content.
+
+    The LLM often opens with lines like:
+      "Aquí tienes un cuestionario de nivel intermedio sobre Geohazards…"
+      "Here is a comprehensive study guide on the French Revolution."
+    These are filler that adds no value to a downloaded document.
+    """
+    lines = text.splitlines()
+    # Skip blank lines at the very top, then check if the first content line
+    # is a preamble sentence (no structural marker like #, -, *, 1., etc.)
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i < len(lines):
+        first = lines[i].strip()
+        is_structural = bool(re.match(r"^(#{1,6}\s|[-*+]\s|\d+[.)]\s)", first))
+        if not is_structural and _PREAMBLE_PATTERNS.match(first):
+            # Drop that line plus any immediately following blank line
+            lines = lines[i + 1:]
+            while lines and not lines[0].strip():
+                lines = lines[1:]
+    return "\n".join(lines)
+
+
 def _strip_markdown(text: str) -> str:
     """Very light markdown → plain text conversion for PDF/DOCX body."""
     text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)   # bold
@@ -191,12 +241,13 @@ async def export_message(
     title = f"{content_type.title()} — {topic}"
 
     try:
+        clean_content = _strip_preamble(msg.content or "")
         if format == "pdf":
-            data = _generate_pdf(title, subject, topic, msg.content or "")
+            data = _generate_pdf(title, subject, topic, clean_content)
             mime = "application/pdf"
             filename = f"{topic.replace(' ', '_')}_{content_type}.pdf"
         else:
-            data = _generate_docx(title, subject, topic, msg.content or "")
+            data = _generate_docx(title, subject, topic, clean_content)
             mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             filename = f"{topic.replace(' ', '_')}_{content_type}.docx"
     except ImportError as exc:
