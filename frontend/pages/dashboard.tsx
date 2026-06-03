@@ -4,6 +4,7 @@
  * Redirects to /login if not authenticated.
  */
 import React, { useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useRouter } from 'next/router';
 import { Layout } from '@/components/Layout';
 import { Sidebar } from '@/components/Sidebar';
@@ -25,7 +26,9 @@ const Dashboard: React.FC = () => {
   const [detectedMetadata, setDetectedMetadata] = React.useState<DetectedMetadata | null>(null);
   const [useStreaming, setUseStreaming] = React.useState(true);
   const [pendingDocument, setPendingDocument] = React.useState<PendingDocument | null>(null);
-  // Tracks the in-progress streaming message ID so ChatWindow can show it
+  // Live streaming state — updated via flushSync so each chunk triggers a render
+  const [streamingMsgId, setStreamingMsgId] = React.useState<string | null>(null);
+  const [streamingText, setStreamingText] = React.useState('');
   const streamingMsgIdRef = useRef<string | null>(null);
 
   const {
@@ -185,25 +188,43 @@ const Dashboard: React.FC = () => {
         if (event.type === 'meta') {
           streamConversationId = event.conversation_id;
           isNewConv = event.is_new_conversation;
-          // Add placeholder streaming message to store
+
+          // If a new conversation was created, add it to the store immediately
+          // so that addMessage / updateConversation don't silently drop updates.
+          if (isNewConv) {
+            const placeholder: ConversationThread = {
+              id: streamConversationId,
+              userId: '',
+              title: `${event.subject} - ${event.topic}`,
+              subject: event.subject,
+              topic: event.topic,
+              primarySubject: event.subject,
+              primaryTopic: event.topic,
+              folderId: null,
+              messages: [],
+              generatedContent: [],
+              documents: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            addConversation(placeholder);
+            setCurrentConversation(placeholder);
+          }
+
+          // Add placeholder streaming message to store and activate streaming state
           addMessage(streamConversationId, {
             id: streamId, role: 'assistant' as const,
             content: '', timestamp: new Date().toISOString(),
           });
+          flushSync(() => { setStreamingMsgId(streamId); setStreamingText(''); });
         } else if (event.type === 'chunk') {
           accContent += event.content;
-          // Read fresh state from Zustand to avoid stale-closure reads
-          const liveConvs = useAppStore.getState().conversations;
-          updateConversation(streamConversationId, {
-            messages: liveConvs
-              .find((c) => c.id === streamConversationId)
-              ?.messages.map((m) =>
-                m.id === streamId ? { ...m, content: accContent } : m
-              ) ?? [],
-          });
+          // flushSync forces a synchronous re-render for every chunk so the
+          // text appears progressively instead of all at once at the end.
+          flushSync(() => setStreamingText(accContent));
         } else if (event.type === 'done') {
           finalBloomTags = event.bloom_tags;
-          // Replace placeholder with the final saved message
+          // Commit final message to Zustand and clear streaming state
           const finalMsg = {
             id: event.message_id,
             role: 'assistant' as const,
@@ -211,18 +232,23 @@ const Dashboard: React.FC = () => {
             timestamp: new Date().toISOString(),
             bloomTags: finalBloomTags,
           };
-          const liveConvs2 = useAppStore.getState().conversations;
-          const conv = liveConvs2.find((c) => c.id === streamConversationId);
+          const liveConvs = useAppStore.getState().conversations;
+          const conv = liveConvs.find((c) => c.id === streamConversationId);
           if (conv) {
             const filtered = conv.messages.filter((m) => m.id !== streamId);
             updateConversation(streamConversationId, { messages: [...filtered, finalMsg] });
           }
+          flushSync(() => { setStreamingMsgId(null); setStreamingText(''); });
         } else if (event.type === 'error') {
           toast.error('Generation error: ' + event.message);
           break;
         }
       }
     } catch { toast.error(T(tr.dashboard.sendErr)); }
+
+    streamingMsgIdRef.current = null;
+    setStreamingMsgId(null);
+    setStreamingText('');
 
     // Refresh sidebar if a new conversation was created
     if (isNewConv) {
@@ -351,7 +377,12 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      <ChatWindow conversation={currentConversation} isLoading={loading} />
+      <ChatWindow
+        conversation={currentConversation}
+        isLoading={loading}
+        streamingMsgId={streamingMsgId}
+        streamingText={streamingText}
+      />
       <ChatInput
         value={inputValue}
         onChange={setInputValue}

@@ -16,6 +16,8 @@ const Home: React.FC = () => {
   const [detectedMetadata, setDetectedMetadata] = useState<DetectedMetadata | null>(null);
   const [pendingDocument, setPendingDocument] = useState<PendingDocument | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
+  const [streamingText, setStreamingText] = useState('');
 
   const {
     conversations,
@@ -309,10 +311,38 @@ const Home: React.FC = () => {
         }));
         setConversations(convs);
 
-        // Activate the new conversation
+        // Activate the new conversation and simulate typing for its first message
         const newConv = convs.find((c) => c.id === data.conversationId);
         if (newConv) {
           setCurrentConversation(newConv);
+          // The last message in the new conv is the assistant reply — animate it
+          const lastMsg = newConv.messages[newConv.messages.length - 1];
+          if (lastMsg?.role === 'assistant' && lastMsg.content) {
+            const fullText = lastMsg.content;
+            const emptyMsg = { ...lastMsg, content: '' };
+            const msgsWithoutLast = newConv.messages.slice(0, -1);
+            updateConversation(newConv.id, { messages: [...msgsWithoutLast, emptyMsg] });
+            setLoading(false);
+
+            const CHARS_PER_FRAME = 18;
+            let pos = 0;
+            setStreamingMsgId(lastMsg.id);
+            setStreamingText('');
+            const step = () => {
+              pos = Math.min(pos + CHARS_PER_FRAME, fullText.length);
+              setStreamingText(fullText.slice(0, pos));
+              if (pos < fullText.length) {
+                requestAnimationFrame(step);
+              } else {
+                updateConversation(newConv.id, {
+                  messages: [...msgsWithoutLast, { ...lastMsg, content: fullText }],
+                });
+                setStreamingMsgId(null);
+                setStreamingText('');
+              }
+            };
+            requestAnimationFrame(step);
+          }
         }
 
         const wasTopicChange = !!currentConversation;
@@ -323,20 +353,51 @@ const Home: React.FC = () => {
           );
         }
       } else {
-        // Same conversation – append assistant reply
+        // Same conversation – append assistant reply with typing animation
+        const assistantMsgId = uuidv4();
         addMessage(data.conversationId, {
-          id: uuidv4(),
+          id: assistantMsgId,
           role: 'assistant' as const,
-          content: data.content,
+          content: '',
           timestamp: new Date().toISOString(),
           contentType: (data.contentType as ContentType) || 'text',
         });
-        // Always update title + metadata (backend may have improved the detection)
         updateConversation(data.conversationId, {
           ...(data.title ? { title: data.title } : {}),
           ...(data.subject ? { subject: data.subject, primarySubject: data.subject } : {}),
           ...(data.topic ? { topic: data.topic, primaryTopic: data.topic } : {}),
         });
+
+        setLoading(false);
+
+        // Reveal text via requestAnimationFrame — each frame is a new browser task
+        // so React flushes the state update before the next frame, giving true streaming.
+        const fullText: string = data.content ?? '';
+        const CHARS_PER_FRAME = 18;
+        let pos = 0;
+        setStreamingMsgId(assistantMsgId);
+        setStreamingText('');
+
+        const step = () => {
+          pos = Math.min(pos + CHARS_PER_FRAME, fullText.length);
+          setStreamingText(fullText.slice(0, pos));
+          if (pos < fullText.length) {
+            requestAnimationFrame(step);
+          } else {
+            // Done — commit to Zustand and clear streaming state
+            updateConversation(data.conversationId, {
+              messages: useAppStore.getState()
+                .conversations.find((c) => c.id === data.conversationId)
+                ?.messages.map((m) =>
+                  m.id === assistantMsgId ? { ...m, content: fullText } : m
+                ) ?? [],
+            });
+            setStreamingMsgId(null);
+            setStreamingText('');
+          }
+        };
+        requestAnimationFrame(step);
+        return; // setLoading(false) already called above
       }
     } catch (err: any) {
       const detail = err?.response?.data?.detail || err?.message || 'Failed to send message';
@@ -368,7 +429,12 @@ const Home: React.FC = () => {
         />
       }
     >
-      <ChatWindow conversation={currentConversation} isLoading={loading} />
+      <ChatWindow
+        conversation={currentConversation}
+        isLoading={loading && !streamingMsgId}
+        streamingMsgId={streamingMsgId}
+        streamingText={streamingText}
+      />
       <ChatInput
         value={inputValue}
         onChange={setInputValue}

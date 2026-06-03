@@ -8,9 +8,16 @@ import { tr } from '@/lib/translations';
 interface ChatWindowProps {
   conversation: ConversationThread | null;
   isLoading?: boolean;
+  streamingMsgId?: string | null;
+  streamingText?: string;
 }
 
-export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, isLoading = false }) => {
+export const ChatWindow: React.FC<ChatWindowProps> = ({
+  conversation,
+  isLoading = false,
+  streamingMsgId = null,
+  streamingText = '',
+}) => {
   const T = useT();
 
   if (!conversation) {
@@ -61,8 +68,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, isLoading 
             conversation.messages.map((message) => (
               <MessageItem
                 key={message.id}
-                message={message}
+                message={
+                  streamingMsgId && message.id === streamingMsgId
+                    ? { ...message, content: streamingText }
+                    : message
+                }
                 conversationId={conversation.id}
+                isStreaming={streamingMsgId === message.id}
               />
             ))
           )}

@@ -12,6 +12,7 @@ import { useAppStore } from '@/store/appStore';
 interface MessageItemProps {
   message: Message;
   isLoading?: boolean;
+  isStreaming?: boolean;
   /** Required to submit ratings — pass the parent conversation ID. */
   conversationId?: string;
 }
@@ -158,6 +159,7 @@ const BloomBadges: React.FC<{ tags: BloomTag[] }> = ({ tags }) => {
 export const MessageItem: React.FC<MessageItemProps> = ({
   message,
   isLoading = false,
+  isStreaming = false,
   conversationId,
 }) => {
   const T = useT();
@@ -257,6 +259,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({
             >
               {message.content}
             </ReactMarkdown>
+            {isStreaming && (
+              <span className="inline-block w-2 h-4 bg-gray-500 ml-0.5 animate-pulse align-middle" />
+            )}
           </div>
         )}
 
