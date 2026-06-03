@@ -13,8 +13,7 @@ export function useDocumentUpload() {
   const upload = useCallback(
     async (
       file: File,
-      subject: string,
-      level: string,
+      subject?: string,
       description?: string,
     ): Promise<DocumentUploadResponse | null> => {
       setIsUploading(true);
@@ -24,7 +23,6 @@ export function useDocumentUpload() {
       try {
         const response = await apiClient.uploadDocument(file, {
           subject,
-          level,
           description,
         });
         setProgress(100);

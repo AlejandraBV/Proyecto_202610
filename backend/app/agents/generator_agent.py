@@ -51,16 +51,13 @@ class GeneratorAgent:
                 feedback_examples=feedback_examples,
                 requirements=requirements,
             )
-            
-            # Generate using LLM
-            generated_content = await LLMService.generate_content(
-                content_type=content_type,
-                subject=subject,
-                topic=topic,
-                level=level,
-                additional_context=prompt,
-                previous_feedback=None,
-            )
+
+            # Send the fully-built prompt directly to the LLM.
+            # Do NOT pass it through LLMService.generate_content() — that would
+            # double-wrap it inside a second _build_prompt() call, burying the
+            # document context under "Additional context / requirements" and
+            # causing the model to fall back to generic knowledge.
+            generated_content = await LLMService.generate_with_prompt(prompt)
             
             logger.info(f"Generated {content_type} content for {subject}/{topic}")
             return generated_content
@@ -94,15 +91,10 @@ class GeneratorAgent:
                 feedback_examples=feedback_examples,
                 requirements=requirements,
             )
-            
-            async for chunk in LLMService.generate_content_stream(
-                content_type=content_type,
-                subject=subject,
-                topic=topic,
-                level=level,
-                additional_context=prompt,
-                previous_feedback=None,
-            ):
+
+            # Same as generate(): send the pre-built prompt directly to avoid
+            # double-wrapping through LLMService.generate_content_stream().
+            async for chunk in LLMService._generate_with_gemini_stream(prompt):
                 yield chunk
                 
         except Exception as e:
@@ -132,7 +124,23 @@ class GeneratorAgent:
         
         instruction = content_instructions.get(content_type, "Generate academic content")
         
-        prompt = f"""You are an expert academic content generator specializing in {subject}.
+        # Detect whether the context comes from an uploaded document (marked with
+        # the === DOCUMENT CONTEXT === header added by AnalyzerAgent).
+        has_document = retrieved_context and "=== DOCUMENT CONTEXT" in retrieved_context
+
+        if has_document:
+            preamble = (
+                "You are an expert academic content generator.\n\n"
+                "IMPORTANT: An uploaded document is provided below as the authoritative source. "
+                "Base ALL content exclusively on the document. "
+                "If the document's actual subject or terminology differs from the Subject/Topic "
+                "labels, silently use the document's content — do NOT mention or explain any "
+                "discrepancy in your output. Just generate the content."
+            )
+        else:
+            preamble = f"You are an expert academic content generator specializing in {subject}."
+
+        prompt = f"""{preamble}
 
 # Task
 Create high-quality {content_type} content for the following:
@@ -145,7 +153,7 @@ Create high-quality {content_type} content for the following:
 {instruction}
 
 """
-        
+
         # Add requirements
         if requirements:
             if requirements.get("include_examples"):
@@ -157,11 +165,11 @@ Create high-quality {content_type} content for the following:
             if requirements.get("include_references"):
                 prompt += "- Include references to sources\n"
             prompt += "\n"
-        
+
         # Add RAG context if available
         if retrieved_context:
-            prompt += f"""# Reference Material Context
-Use the following reference material to ensure accuracy and consistency:
+            prompt += f"""# Reference Material
+{"REQUIRED SOURCE — base your content on this document:" if has_document else "Use the following reference material to ensure accuracy and consistency:"}
 
 {retrieved_context}
 

@@ -1,26 +1,33 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { apiClient } from '@/lib/api';
+import { useT } from '@/hooks/useT';
+import { tr } from '@/lib/translations';
 import toast from 'react-hot-toast';
 
 const Login: React.FC = () => {
   const router = useRouter();
+  const T = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) router.replace('/');
+  }, [router]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const response = await apiClient.login(email, password);
       localStorage.setItem('token', response.data.access_token);
-      toast.success('Login successful');
+      toast.success(T(tr.auth.loginSuccess));
       router.push('/');
-    } catch (error) {
-      toast.error('Invalid email or password');
+    } catch {
+      toast.error(T(tr.auth.loginError));
     } finally {
       setLoading(false);
     }
@@ -30,12 +37,12 @@ const Login: React.FC = () => {
     <div className="flex h-screen items-center justify-center bg-gray-100">
       <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
         <h1 className="mb-6 text-center text-2xl font-bold text-gray-900">
-          Academic Content Generator
+          {T(tr.auth.appTitle)}
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
+            <label className="block text-sm font-medium text-gray-700">{T(tr.auth.email)}</label>
             <input
               type="email"
               value={email}
@@ -47,7 +54,7 @@ const Login: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
+            <label className="block text-sm font-medium text-gray-700">{T(tr.auth.password)}</label>
             <input
               type="password"
               value={password}
@@ -63,14 +70,14 @@ const Login: React.FC = () => {
             disabled={loading}
             className="w-full rounded-lg bg-primary px-4 py-2 text-white hover:bg-primary/90 disabled:bg-gray-300 transition-colors font-medium"
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? T(tr.auth.loggingIn) : T(tr.auth.login)}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-600">
-          Don't have an account?{' '}
+          {T(tr.auth.noAccount)}{' '}
           <Link href="/register" className="font-medium text-primary hover:underline">
-            Sign up
+            {T(tr.auth.signUp)}
           </Link>
         </p>
       </div>

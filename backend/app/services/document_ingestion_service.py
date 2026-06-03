@@ -86,28 +86,97 @@ class DocumentIngestor:
     
     @staticmethod
     async def _parse_url(url: str) -> str:
-        """Extract text from URL"""
+        """
+        Extract visible text from a URL.
+
+        Strategy
+        ────────
+        1. Regex-remove entire block content of invisible elements
+           (script, style, noscript, svg, math, head).
+           • Using (?=[ \\t\\n\\r\\f\\v>]) after the tag name avoids matching
+             e.g. <header> when looking for <head>.
+           • re.DOTALL handles multi-line scripts / style blocks.
+        2. Strip all remaining HTML tags (< ... >).
+        3. Decode HTML entities (&amp; → &, &eacute; → é, &#160; → nbsp, …).
+        4. Collapse whitespace, discard trivially short lines.
+        5. Deduplicate consecutive identical lines (nav menus repeat).
+
+        This avoids Python HTMLParser's depth-tracking, which breaks on pages
+        that use IE conditional comments (<!--[if IE 8]>…<![endif]-->) because
+        those comments confuse the tag-depth counter and can leave _skip_depth
+        stuck at ≥ 1 for the entire body.
+        """
         try:
             import requests
-            from html.parser import HTMLParser
-            
-            response = requests.get(url, timeout=10)
+            import html as html_module
+
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0 Safari/537.36"
+                )
+            }
+            response = requests.get(url, timeout=15, headers=headers)
             response.raise_for_status()
-            
-            # Simple HTML to text extraction
-            class HTMLToText(HTMLParser):
-                def __init__(self):
-                    super().__init__()
-                    self.text = []
-                
-                def handle_data(self, data):
-                    text = data.strip()
-                    if text:
-                        self.text.append(text)
-            
-            parser = HTMLToText()
-            parser.feed(response.text)
-            return '\n'.join(parser.text)
+
+            # ── Encoding fix ───────────────────────────────────────────────
+            # Many servers (especially Spanish/Latin-American news sites) return
+            # UTF-8 HTML but either omit or mis-declare the charset as
+            # ISO-8859-1 / Latin-1.  requests then decodes the bytes as
+            # Latin-1, turning é → Ã© and ó → Ã³ (the classic "mojibake").
+            # Strategy: always try UTF-8 first; fall back to the server-declared
+            # encoding only if the bytes are not valid UTF-8.
+            try:
+                html_content = response.content.decode("utf-8")
+            except (UnicodeDecodeError, LookupError):
+                # Genuine non-UTF-8 page; respect what the server declared
+                enc = response.encoding or "utf-8"
+                html_content = response.content.decode(enc, errors="replace")
+
+            # ── Step 1: remove entire block content for invisible elements ──
+            # (?=[\s>]) after the tag name ensures <head> matches but <header>
+            # does not.  </\1\s*> uses a back-reference so only the correct
+            # closing tag terminates the block.
+            _BLOCK_RE = re.compile(
+                r"<(script|style|noscript|svg|math|head)(?=[\s>])[^>]*>"
+                r".*?</\1\s*>",
+                re.DOTALL | re.IGNORECASE,
+            )
+            cleaned = _BLOCK_RE.sub(" ", html_content)
+
+            # ── Step 2: strip all remaining HTML tags ──────────────────────
+            text_only = re.sub(r"<[^>]+>", " ", cleaned)
+
+            # ── Step 3: decode HTML entities ──────────────────────────────
+            text_only = html_module.unescape(text_only)
+
+            # ── Step 4: normalise whitespace, drop trivially short lines ──
+            lines: list[str] = []
+            for line in re.split(r"[\r\n]+", text_only):
+                line = re.sub(r"[ \t]+", " ", line).strip()
+                if len(line) > 3:
+                    lines.append(line)
+
+            # ── Step 5: deduplicate (nav menus repeat identical entries) ──
+            seen: set[str] = set()
+            unique: list[str] = []
+            for line in lines:
+                if line not in seen:
+                    unique.append(line)
+                    seen.add(line)
+
+            extracted = "\n".join(unique)
+
+            if len(extracted) < 100:
+                raise Exception(
+                    "No readable text could be extracted from the URL "
+                    f"(only {len(extracted)} chars after cleaning)."
+                )
+
+            logger.info("URL extracted %d characters from %s", len(extracted), url)
+            return extracted
+
         except Exception as e:
             raise Exception(f"URL parsing error: {e}")
 

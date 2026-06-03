@@ -1,10 +1,18 @@
 import { create } from 'zustand';
-import { ConversationThread, Message, GeneratedContent, Document, ChunkResponse } from '@/types';
+import { ConversationThread, Message, GeneratedContent, Document, ChunkResponse, Folder } from '@/types';
+import { Lang } from '@/lib/translations';
 
 interface AppStore {
   // User state
   currentUser: any | null;
   setCurrentUser: (user: any) => void;
+
+  // Folder state
+  folders: Folder[];
+  setFolders: (folders: Folder[]) => void;
+  addFolder: (folder: Folder) => void;
+  updateFolder: (id: string, updates: Partial<Folder>) => void;
+  removeFolder: (id: string) => void;
 
   // Conversation state
   conversations: ConversationThread[];
@@ -13,6 +21,7 @@ interface AppStore {
   setCurrentConversation: (conversation: ConversationThread | null) => void;
   addConversation: (conversation: ConversationThread) => void;
   updateConversation: (id: string, updates: Partial<ConversationThread>) => void;
+  removeConversation: (id: string) => void;
 
   // Message state
   addMessage: (conversationId: string, message: Message) => void;
@@ -44,18 +53,39 @@ interface AppStore {
   // RAG UI state
   showRetrievedChunks: boolean;
   setShowRetrievedChunks: (show: boolean) => void;
+
+  // Language preference (persisted to localStorage)
+  language: Lang;
+  setLanguage: (lang: Lang) => void;
+
+  // Dark mode preference (persisted to localStorage)
+  darkMode: boolean;
+  setDarkMode: (on: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
   currentUser: null,
   setCurrentUser: (user) => set({ currentUser: user }),
 
+  // Folders
+  folders: [],
+  setFolders: (folders) => set({ folders }),
+  addFolder: (folder) =>
+    set((state) => ({ folders: [...state.folders, folder] })),
+  updateFolder: (id, updates) =>
+    set((state) => ({
+      folders: state.folders.map((f) => (f.id === id ? { ...f, ...updates } : f)),
+    })),
+  removeFolder: (id) =>
+    set((state) => ({ folders: state.folders.filter((f) => f.id !== id) })),
+
+  // Conversations
   conversations: [],
   currentConversation: null,
   setConversations: (conversations) => set({ conversations }),
   setCurrentConversation: (currentConversation) => set({ currentConversation }),
   addConversation: (conversation) =>
-    set((state) => ({ conversations: [...state.conversations, conversation] })),
+    set((state) => ({ conversations: [conversation, ...state.conversations] })),
   updateConversation: (id, updates) =>
     set((state) => ({
       conversations: state.conversations.map((c) =>
@@ -64,6 +94,11 @@ export const useAppStore = create<AppStore>((set) => ({
       currentConversation: state.currentConversation?.id === id
         ? { ...state.currentConversation, ...updates }
         : state.currentConversation,
+    })),
+  removeConversation: (id) =>
+    set((state) => ({
+      conversations: state.conversations.filter((c) => c.id !== id),
+      currentConversation: state.currentConversation?.id === id ? null : state.currentConversation,
     })),
 
   addMessage: (conversationId, message) =>
@@ -150,4 +185,32 @@ export const useAppStore = create<AppStore>((set) => ({
   // RAG UI state
   showRetrievedChunks: false,
   setShowRetrievedChunks: (showRetrievedChunks) => set({ showRetrievedChunks }),
+
+  // Language preference — read initial value from localStorage (SSR-safe)
+  language: (typeof window !== 'undefined'
+    ? (localStorage.getItem('app_language') as Lang | null) ?? 'en'
+    : 'en'),
+  setLanguage: (lang) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('app_language', lang);
+    }
+    set({ language: lang });
+  },
+
+  // Dark mode — read from localStorage and sync the <html> class on init
+  darkMode: (() => {
+    if (typeof window === 'undefined') return false;
+    const on = localStorage.getItem('darkMode') === 'true';
+    if (on) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+    return on;
+  })(),
+  setDarkMode: (on) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('darkMode', String(on));
+      if (on) document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+    }
+    set({ darkMode: on });
+  },
 }));

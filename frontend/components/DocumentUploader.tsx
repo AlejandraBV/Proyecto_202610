@@ -3,8 +3,7 @@ import { Upload, FileText, X } from 'lucide-react';
 import { useDocumentUpload } from '@/hooks/useDocumentUpload';
 
 interface DocumentUploaderProps {
-  subject: string;
-  level?: string;
+  subject?: string;
   onUploaded?: (result: any) => void;
 }
 
@@ -14,7 +13,6 @@ interface DocumentUploaderProps {
  */
 export const DocumentUploader: React.FC<DocumentUploaderProps> = ({
   subject,
-  level = 'university',
   onUploaded,
 }) => {
   const { upload, isUploading, progress, error, reset } = useDocumentUpload();
@@ -24,12 +22,12 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({
   const handleFile = useCallback(
     async (file: File) => {
       setSelectedFile(file);
-      const result = await upload(file, subject, level);
+      const result = await upload(file, subject);
       if (result && onUploaded) {
         onUploaded(result);
       }
     },
-    [upload, subject, level, onUploaded],
+    [upload, subject, onUploaded],
   );
 
   const onDrop = useCallback(

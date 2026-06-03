@@ -14,6 +14,15 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Try to import LangGraph orchestrator; fall back to legacy loop if not available
+try:
+    from app.orchestration.langgraph_orchestrator import run_generation_pipeline as _lg_run
+    _USE_LANGGRAPH = True
+    logger.info("LangGraph orchestrator loaded ✓")
+except Exception as _lg_err:
+    _USE_LANGGRAPH = False
+    logger.warning("LangGraph not available (%s) — using legacy pipeline", _lg_err)
+
 
 class ContentOrchestrator:
     """
@@ -40,6 +49,7 @@ class ContentOrchestrator:
         level: str,
         user_id: str = None,
         document_context: Optional[str] = None,
+        document_id: Optional[str] = None,
         previous_feedback: Optional[list] = None,
         db: Any = None,
     ) -> Dict[str, Any]:
@@ -69,7 +79,42 @@ class ContentOrchestrator:
         """
         try:
             logger.info(f"Starting generation pipeline for {subject}/{topic}")
-            
+
+            # ── LangGraph path (preferred) ────────────────────────────────────
+            if _USE_LANGGRAPH:
+                return await _lg_run(
+                    conversation_id=conversation_id,
+                    user_prompt=user_prompt,
+                    subject=subject,
+                    topic=topic,
+                    level=level,
+                    user_id=user_id,
+                    document_context=document_context,
+                    document_id=document_id,
+                    previous_feedback=previous_feedback,
+                    db=db,
+                )
+
+            # ── Legacy fallback (while-loop) ──────────────────────────────────
+            # Fetch document content if a document_id was supplied and no
+            # inline document_context was already provided.
+            if document_id and not document_context and db is not None:
+                try:
+                    from sqlalchemy.future import select
+                    from app.models.models import Document
+                    result = await db.execute(
+                        select(Document).filter(Document.id == document_id)
+                    )
+                    doc = result.scalar_one_or_none()
+                    if doc and doc.original_content:
+                        document_context = doc.original_content
+                        logger.info(
+                            "Loaded document context from DB: %s (%d chars)",
+                            doc.filename, len(document_context)
+                        )
+                except Exception as doc_err:
+                    logger.warning("Could not load document %s: %s", document_id, doc_err)
+
             # STEP 1: Analyze
             # ================
             analysis = await AnalyzerAgent.analyze_with_context(

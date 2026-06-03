@@ -123,7 +123,16 @@ class VectorDatabaseService:
         """
         try:
             collection = cls.get_collection()
-            
+
+            # ChromaDB raises when the collection is empty — check first
+            if collection.count() == 0:
+                logger.info("Vector collection is empty; returning no results")
+                return {"query": query_text, "results": [], "count": 0}
+
+            # Clamp n_results to actual collection size to avoid ChromaDB errors
+            actual_count = collection.count()
+            n_results = min(n_results, actual_count)
+
             # Execute query
             if where_filter:
                 results = collection.query(
@@ -136,7 +145,7 @@ class VectorDatabaseService:
                     query_texts=[query_text],
                     n_results=n_results,
                 )
-            
+
             # Format results
             return {
                 "query": query_text,
@@ -197,25 +206,30 @@ class VectorDatabaseService:
         Returns:
             Concatenated context string
         """
-        # Build filter if needed
+        # Build filter if needed — ChromaDB requires $and for multiple conditions
         where_filter = None
-        if subject or topic:
-            where_filter = {}
-            if subject:
-                where_filter["subject"] = subject
-            if topic:
-                where_filter["topic"] = topic
+        conditions = []
+        if subject:
+            conditions.append({"subject": {"$eq": subject}})
+        if topic:
+            conditions.append({"topic": {"$eq": topic}})
+        if len(conditions) == 1:
+            where_filter = conditions[0]
+        elif len(conditions) > 1:
+            where_filter = {"$and": conditions}
         
-        # Query for similar documents
-        results = await cls.query(
-            query_text=user_query,
-            n_results=top_k,
-            where_filter=where_filter
-        )
-        
-        # Concatenate retrieved chunks
-        context = "\n\n---\n\n".join([r["content"] for r in results["results"]])
-        
+        # Query for similar documents — gracefully degrade if collection is empty
+        try:
+            results = await cls.query(
+                query_text=user_query,
+                n_results=top_k,
+                where_filter=where_filter
+            )
+            context = "\n\n---\n\n".join([r["content"] for r in results["results"]])
+        except Exception as e:
+            logger.warning(f"Vector DB query failed (no context will be used): {e}")
+            context = ""
+
         return context
 
 
@@ -255,17 +269,24 @@ class VectorService:
         Returns:
             List of dicts with 'text' and 'score' keys
         """
-        where_filter = {}
+        # ChromaDB requires $and for multiple conditions
+        conditions = []
         if subject:
-            where_filter["subject"] = subject
+            conditions.append({"subject": {"$eq": subject}})
         if topic:
-            where_filter["topic"] = topic
+            conditions.append({"topic": {"$eq": topic}})
+        if len(conditions) == 1:
+            where_filter = conditions[0]
+        elif len(conditions) > 1:
+            where_filter = {"$and": conditions}
+        else:
+            where_filter = None
 
         collection = self._get_collection()
         query_result = collection.query(
             query_texts=[query],
             n_results=n_results,
-            where=where_filter if where_filter else None,
+            where=where_filter,
         )
 
         results = []

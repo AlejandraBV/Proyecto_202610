@@ -2,38 +2,29 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { apiClient } from '@/lib/api';
+import { useT } from '@/hooks/useT';
+import { tr } from '@/lib/translations';
 import toast from 'react-hot-toast';
 
 const Register: React.FC = () => {
   const router = useRouter();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    name: '',
-  });
+  const T = useT();
+  const [formData, setFormData] = useState({ email: '', password: '', name: '' });
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      await apiClient.register(
-        formData.email,
-        formData.password,
-        formData.name
-      );
-      toast.success('Registration successful! Please login.');
+      await apiClient.register(formData.email, formData.password, formData.name);
+      toast.success(T(tr.auth.registerSuccess));
       router.push('/login');
-    } catch (error) {
-      toast.error('Registration failed. Try another email.');
+    } catch {
+      toast.error(T(tr.auth.registerError));
     } finally {
       setLoading(false);
     }
@@ -43,12 +34,12 @@ const Register: React.FC = () => {
     <div className="flex h-screen items-center justify-center bg-gray-100">
       <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
         <h1 className="mb-6 text-center text-2xl font-bold text-gray-900">
-          Create Account
+          {T(tr.auth.createAccount)}
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Full Name</label>
+            <label className="block text-sm font-medium text-gray-700">{T(tr.auth.fullName)}</label>
             <input
               type="text"
               name="name"
@@ -56,12 +47,12 @@ const Register: React.FC = () => {
               onChange={handleChange}
               required
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="John Doe"
+              placeholder={T(tr.auth.namePlaceholder)}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
+            <label className="block text-sm font-medium text-gray-700">{T(tr.auth.email)}</label>
             <input
               type="email"
               name="email"
@@ -74,7 +65,7 @@ const Register: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
+            <label className="block text-sm font-medium text-gray-700">{T(tr.auth.password)}</label>
             <input
               type="password"
               name="password"
@@ -91,14 +82,14 @@ const Register: React.FC = () => {
             disabled={loading}
             className="w-full rounded-lg bg-primary px-4 py-2 text-white hover:bg-primary/90 disabled:bg-gray-300 transition-colors font-medium"
           >
-            {loading ? 'Creating account...' : 'Sign Up'}
+            {loading ? T(tr.auth.creatingAccount) : T(tr.auth.signUp)}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-600">
-          Already have an account?{' '}
+          {T(tr.auth.alreadyAccount)}{' '}
           <Link href="/login" className="font-medium text-primary hover:underline">
-            Login
+            {T(tr.auth.login)}
           </Link>
         </p>
       </div>

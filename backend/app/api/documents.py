@@ -13,12 +13,36 @@ from app.core.security import decode_token
 from app.schemas import DocumentUpload, DocumentResponse, DocumentAnalysis
 from app.models.models import Document, Chunk, User
 from app.orchestration.content_orchestrator import ContentOrchestrator
+from app.services.document_ingestion_service import DocumentIngestor
 from app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+def _extract_text_preview(file_path: str, file_ext: str, raw_content: bytes) -> str:
+    """Extract a short text preview from the file for AI subject inference."""
+    try:
+        if file_ext == "pdf":
+            import fitz  # PyMuPDF
+            doc = fitz.open(file_path)
+            text = ""
+            for page in doc[:3]:  # First 3 pages
+                text += page.get_text()
+            doc.close()
+            return text[:3000]
+        elif file_ext == "docx":
+            from docx import Document as DocxDocument
+            doc = DocxDocument(file_path)
+            text = "\n".join(p.text for p in doc.paragraphs[:60])
+            return text[:3000]
+        else:  # txt and others
+            return raw_content.decode("utf-8", errors="ignore")[:3000]
+    except Exception as exc:
+        logger.warning(f"Could not extract text preview ({exc}); falling back to raw decode")
+        return raw_content.decode("utf-8", errors="ignore")[:3000]
 
 
 def get_current_user_id(token: Optional[str]) -> str:
@@ -75,8 +99,35 @@ async def upload_document(
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
             tmp.write(content)
             tmp_path = tmp.name
-        
+
         try:
+            # If no subject provided, try to infer it from document content using AI
+            if not subject:
+                try:
+                    text_preview = _extract_text_preview(tmp_path, file_ext, content)
+                    if text_preview.strip():
+                        from app.services.llm_service import LLMService
+                        subject = await LLMService.infer_subject(text_preview)
+                        logger.info(f"Inferred subject for {file.filename!r}: {subject!r}")
+                    else:
+                        subject = "General"
+                except Exception as infer_err:
+                    logger.warning(f"Subject inference failed ({infer_err}); defaulting to 'General'")
+                    subject = "General"
+
+            # Extract full text from the document BEFORE ingestion (while tmp file exists)
+            # This gives us clean, readable text for the RAG context instead of raw bytes.
+            try:
+                extracted_text = await DocumentIngestor.parse_file(tmp_path, file_ext)
+                logger.info(
+                    "Extracted %d chars of text from %s", len(extracted_text), file.filename
+                )
+            except Exception as extract_err:
+                logger.warning(
+                    "Full text extraction failed (%s); falling back to text preview", extract_err
+                )
+                extracted_text = _extract_text_preview(tmp_path, file_ext, content)
+
             # Ingest document through orchestrator
             ingestion_result = await ContentOrchestrator.ingest_teacher_document(
                 document_id=document_id,
@@ -87,15 +138,16 @@ async def upload_document(
                 user_id=user_id,
                 conversation_id=conversation_id,
             )
-            
-            # Save document metadata to DB
+
+            # Save document metadata to DB — store extracted text, not raw bytes
             document = Document(
                 id=document_id,
                 user_id=user_id,
                 conversation_id=conversation_id,
                 filename=file.filename,
                 file_type=file_ext,
-                original_content=content.decode('utf-8', errors='ignore')[:10000],  # Store preview
+                original_content=extracted_text[:50000],   # up to 50 k chars of clean text
+                subject=subject,
                 chunks_count=ingestion_result.get("chunks_created", 0),
                 vector_index_ids=str(ingestion_result.get("chunk_ids", [])),
             )
@@ -105,8 +157,8 @@ async def upload_document(
             await db.refresh(document)
             
             logger.info(f"Document uploaded: {file.filename} ({document_id})")
-            
-            return DocumentResponse.from_orm(document)
+
+            return document
             
         finally:
             # Clean up temp file
@@ -117,6 +169,65 @@ async def upload_document(
         raise
     except Exception as e:
         logger.error(f"Error uploading document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/fetch-url", response_model=DocumentResponse)
+async def upload_from_url(
+    request: dict,
+    authorization: Optional[str] = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Fetch a document from a URL and ingest it for RAG.
+    Request body: { url, subject, level, description? }
+    """
+    try:
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Missing authorization")
+
+        user_id = get_current_user_id(authorization)
+        url = request.get("url", "")
+        subject = request.get("subject", "General")
+
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+
+        # Fetch content from URL
+        content = await DocumentIngestor._parse_url(url)
+
+        document_id = str(uuid.uuid4())
+
+        # Ingest content
+        ingestion_result = await ContentOrchestrator.ingest_teacher_document(
+            document_id=document_id,
+            file_path=url,
+            file_type="url",
+            subject=subject,
+            topic=request.get("topic", "Unspecified"),
+            user_id=user_id,
+        )
+
+        document = Document(
+            id=document_id,
+            user_id=user_id,
+            filename=url[:200],
+            file_type="url",
+            original_content=content[:10000],
+            chunks_count=ingestion_result.get("chunks_created", 0),
+            vector_index_ids=str(ingestion_result.get("chunk_ids", [])),
+        )
+        db.add(document)
+        await db.commit()
+        await db.refresh(document)
+
+        logger.info(f"URL document ingested: {url} ({document_id})")
+        return document
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching from URL: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -343,6 +454,113 @@ async def get_document_chunks(
     except Exception as e:
         logger.error(f"Error fetching chunks for document {document_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/syllabus", response_model=DocumentAnalysis)
+async def ingest_syllabus(
+    request: dict,
+    authorization: Optional[str] = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Accept a structured course syllabus and ingest it as a RAG document.
+
+    Request body::
+
+        {
+          "course_name": "Introduction to Biology",
+          "subject": "Biology",
+          "week": 3,
+          "learning_objectives": ["Understand cell structure", "Apply membrane concepts"],
+          "topics": [
+            {"name": "Cell membrane", "bloom_level": "Understand"},
+            {"name": "Osmosis and diffusion", "bloom_level": "Apply"}
+          ],
+          "notes": "Focus on transport mechanisms for the exam"
+        }
+
+    The backend formats the fields into a human-readable text document and
+    ingests it via the standard RAG pipeline so it becomes retrievable context
+    for future content generation requests.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization")
+    user_id = get_current_user_id(authorization)
+
+    course_name = request.get("course_name", "Untitled Course")
+    subject = request.get("subject", "General")
+    week = request.get("week")
+    objectives = request.get("learning_objectives", [])
+    topics = request.get("topics", [])
+    notes = request.get("notes", "")
+
+    # Build a structured plain-text document
+    lines = [
+        f"# Course Syllabus: {course_name}",
+        f"Subject: {subject}",
+    ]
+    if week:
+        lines.append(f"Week: {week}")
+
+    if objectives:
+        lines.append("\n## Learning Objectives")
+        for obj in objectives:
+            lines.append(f"- {obj}")
+
+    if topics:
+        lines.append("\n## Topics Covered")
+        for t in topics:
+            if isinstance(t, dict):
+                bloom = t.get("bloom_level", "")
+                name = t.get("name", str(t))
+                lines.append(f"- {name}" + (f"  [{bloom}]" if bloom else ""))
+            else:
+                lines.append(f"- {t}")
+
+    if notes:
+        lines.append(f"\n## Notes\n{notes}")
+
+    content = "\n".join(lines)
+
+    document_id = str(uuid.uuid4())
+    filename = f"syllabus_{course_name[:40].replace(' ', '_')}_{document_id[:8]}.txt"
+
+    try:
+        ingestion_result = await ContentOrchestrator.ingest_teacher_document(
+            document_id=document_id,
+            file_path="",
+            file_type="txt",
+            subject=subject,
+            topic=course_name,
+            user_id=user_id,
+        )
+    except Exception as e:
+        logger.warning("Syllabus vector ingestion failed: %s", e)
+        ingestion_result = {"chunks_created": 0, "chunk_ids": []}
+
+    document = Document(
+        id=document_id,
+        user_id=user_id,
+        filename=filename,
+        file_type="txt",
+        original_content=content,
+        subject=subject,
+        chunks_count=ingestion_result.get("chunks_created", 0),
+        vector_index_ids=str(ingestion_result.get("chunk_ids", [])),
+    )
+    db.add(document)
+    await db.commit()
+
+    logger.info("Syllabus document ingested: %s for user %s", document_id, user_id)
+
+    return DocumentAnalysis(
+        document_id=document_id,
+        chunks_created=ingestion_result.get("chunks_created", 0),
+        chunk_ids=ingestion_result.get("chunk_ids", []),
+        subject=subject,
+        topic=course_name,
+        status="success",
+    )
 
 
 @router.post("/search/semantic")

@@ -2,6 +2,8 @@ import React from 'react';
 import { ConversationThread } from '@/types';
 import { MessageItem } from './MessageItem';
 import { ScrollArea } from './ScrollArea';
+import { useT } from '@/hooks/useT';
+import { tr } from '@/lib/translations';
 
 interface ChatWindowProps {
   conversation: ConversationThread | null;
@@ -9,41 +11,35 @@ interface ChatWindowProps {
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, isLoading = false }) => {
+  const T = useT();
+
   if (!conversation) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-white">
         <div className="text-center">
           <h1 className="mb-2 text-4xl font-bold text-gray-900">
-            Academic Content Generator
+            {T(tr.chatWindow.title)}
           </h1>
           <p className="mb-8 text-gray-600">
-            Generate exams, slideshows, guides, and more with AI
+            {T(tr.chatWindow.subtitle)}
           </p>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-lg border border-gray-200 p-4">
-              <h3 className="mb-2 font-semibold text-gray-900">📝 Generate Exams</h3>
-              <p className="text-sm text-gray-600">
-                Create customized exams with multiple question types
-              </p>
+              <h3 className="mb-2 font-semibold text-gray-900">{T(tr.chatWindow.card1Title)}</h3>
+              <p className="text-sm text-gray-600">{T(tr.chatWindow.card1Body)}</p>
             </div>
             <div className="rounded-lg border border-gray-200 p-4">
-              <h3 className="mb-2 font-semibold text-gray-900">🎬 Create Slideshows</h3>
-              <p className="text-sm text-gray-600">
-                Design engaging presentations on any topic
-              </p>
+              <h3 className="mb-2 font-semibold text-gray-900">{T(tr.chatWindow.card2Title)}</h3>
+              <p className="text-sm text-gray-600">{T(tr.chatWindow.card2Body)}</p>
             </div>
             <div className="rounded-lg border border-gray-200 p-4">
-              <h3 className="mb-2 font-semibold text-gray-900">📚 Write Guides</h3>
-              <p className="text-sm text-gray-600">
-                Produce comprehensive study and teaching guides
-              </p>
+              <h3 className="mb-2 font-semibold text-gray-900">{T(tr.chatWindow.card3Title)}</h3>
+              <p className="text-sm text-gray-600">{T(tr.chatWindow.card3Body)}</p>
             </div>
             <div className="rounded-lg border border-gray-200 p-4">
-              <h3 className="mb-2 font-semibold text-gray-900">✏️ Refine with Feedback</h3>
-              <p className="text-sm text-gray-600">
-                Iteratively improve content with human input
-              </p>
+              <h3 className="mb-2 font-semibold text-gray-900">{T(tr.chatWindow.card4Title)}</h3>
+              <p className="text-sm text-gray-600">{T(tr.chatWindow.card4Body)}</p>
             </div>
           </div>
         </div>
@@ -52,18 +48,22 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, isLoading 
   }
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex flex-1 min-h-0 flex-col bg-white">
       <ScrollArea className="flex-1">
         <div className="pb-4">
           {conversation.messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center py-12">
               <p className="text-center text-gray-500">
-                No messages yet. Start a conversation!
+                {T(tr.chatWindow.noMessages)}
               </p>
             </div>
           ) : (
             conversation.messages.map((message) => (
-              <MessageItem key={message.id} message={message} />
+              <MessageItem
+                key={message.id}
+                message={message}
+                conversationId={conversation.id}
+              />
             ))
           )}
           {isLoading && (

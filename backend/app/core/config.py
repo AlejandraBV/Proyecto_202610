@@ -11,14 +11,15 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # Google/Gemini
-    GOOGLE_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-pro"
-    
-    # OpenAI
+    # Google Cloud / Vertex AI
+    GOOGLE_CLOUD_PROJECT: str = "alejandria-488623"
+    GOOGLE_CLOUD_LOCATION: str = "us-central1"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
+    # OpenAI (optional fallback)
     OPENAI_API_KEY: Optional[str] = None
     GPT_MODEL: str = "gpt-4o"
-    
+
     # LLM Choice
     LLM_PROVIDER: str = "gemini"  # "gemini" or "openai"
     

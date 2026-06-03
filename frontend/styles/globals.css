@@ -25,3 +25,25 @@ body {
 ::-webkit-scrollbar-thumb {
   @apply bg-gray-300 rounded hover:bg-gray-400;
 }
+
+/* ── Dark mode ─────────────────────────────────────────────────────────────── */
+/* CSS colour-inversion trick: inverts the entire page then re-inverts         */
+/* images/videos so they keep their natural colours.                            */
+
+html.dark body {
+  filter: invert(1) hue-rotate(180deg);
+  background-color: #111;
+}
+
+html.dark img,
+html.dark video,
+html.dark canvas,
+html.dark svg image,
+html.dark [style*="background-image"] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Keep emoji and icon colours natural */
+html.dark .lucide {
+  filter: invert(1) hue-rotate(180deg);
+}

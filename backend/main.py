@@ -8,7 +8,11 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.core.logger import setup_logging
-from app.api import auth_router, conversations_router, documents_router, feedback_router
+from app.api import (
+    auth_router, conversations_router, documents_router,
+    feedback_router, folders_router,
+    audit_router, export_router, evaluation_router, question_bank_router,
+)
 from app.api.health import router as health_router
 from app.middleware.cors_handler import setup_cors
 from app.middleware.error_handler import ErrorHandlerMiddleware
@@ -40,9 +44,14 @@ app.add_middleware(ErrorHandlerMiddleware)
 # Routers
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(folders_router)
 app.include_router(conversations_router)
 app.include_router(documents_router)
 app.include_router(feedback_router)
+app.include_router(audit_router)
+app.include_router(export_router)
+app.include_router(evaluation_router)
+app.include_router(question_bank_router)
 
 
 if __name__ == "__main__":

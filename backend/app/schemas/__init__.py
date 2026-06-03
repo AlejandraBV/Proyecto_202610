@@ -1,5 +1,5 @@
 from app.schemas.schemas import (
-    UserCreate, UserResponse, TokenResponse, TokenData,
+    UserCreate, UserResponse, TokenResponse, TokenData, LoginRequest,
     ConversationCreate, ConversationUpdate, ConversationResponse,
     MessageCreate, MessageResponse, MessageRequest, RoutedMessageResponse,
     GeneratedContentResponse, FeedbackRecordResponse,
@@ -8,10 +8,15 @@ from app.schemas.schemas import (
     DocumentUpload, DocumentResponse, DocumentAnalysis,
     GenerationRequest, GenerationResponse,
     VectorSearchRequest, VectorSearchResult,
+    FolderCreate, FolderUpdate, FolderResponse,
+    MessageRateRequest, MessageRateResponse,
+    ReclassifyRequest, ReclassifyResponse,
+    RefineRequest, RefineResponse,
+    BloomTag,
 )
 
 __all__ = [
-    "UserCreate", "UserResponse", "TokenResponse", "TokenData",
+    "UserCreate", "UserResponse", "TokenResponse", "TokenData", "LoginRequest",
     "ConversationCreate", "ConversationUpdate", "ConversationResponse",
     "MessageCreate", "MessageResponse", "MessageRequest", "RoutedMessageResponse",
     "GeneratedContentResponse", "FeedbackRecordResponse",
@@ -20,4 +25,9 @@ __all__ = [
     "DocumentUpload", "DocumentResponse", "DocumentAnalysis",
     "GenerationRequest", "GenerationResponse",
     "VectorSearchRequest", "VectorSearchResult",
+    "FolderCreate", "FolderUpdate", "FolderResponse",
+    "MessageRateRequest", "MessageRateResponse",
+    "ReclassifyRequest", "ReclassifyResponse",
+    "RefineRequest", "RefineResponse",
+    "BloomTag",
 ]

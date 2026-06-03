@@ -179,6 +179,78 @@ class ReviewerAgent:
 
         return {"met_requirements": met_requirements, "score": score}
 
+    # ── Bloom's Taxonomy ──────────────────────────────────────────────────────
+
+    # Keyword lists per Bloom level (Anderson & Krathwohl revision)
+    _BLOOM_KEYWORDS: Dict[str, List[str]] = {
+        "Remember":   ["define", "list", "recall", "name", "state", "identify",
+                       "label", "match", "memorize", "repeat", "reproduce"],
+        "Understand": ["explain", "describe", "interpret", "summarize", "compare",
+                       "classify", "discuss", "paraphrase", "illustrate", "infer"],
+        "Apply":      ["solve", "use", "calculate", "demonstrate", "apply",
+                       "compute", "show", "complete", "construct", "perform"],
+        "Analyze":    ["analyze", "distinguish", "examine", "differentiate", "relate",
+                       "break down", "contrast", "investigate", "deconstruct"],
+        "Evaluate":   ["assess", "evaluate", "judge", "justify", "critique",
+                       "defend", "argue", "recommend", "select", "appraise"],
+        "Create":     ["design", "create", "develop", "compose", "construct",
+                       "plan", "produce", "formulate", "generate", "invent"],
+    }
+
+    _BLOOM_COLORS: Dict[str, str] = {
+        "Remember":   "green",
+        "Understand": "blue",
+        "Apply":      "yellow",
+        "Analyze":    "orange",
+        "Evaluate":   "red",
+        "Create":     "purple",
+    }
+
+    @staticmethod
+    def tag_bloom_levels(content: str) -> List[Dict[str, Any]]:
+        """
+        Scan generated content and return a distribution of Bloom's taxonomy levels.
+
+        Splits the content into question/item lines, checks each line against
+        keyword lists, and returns an aggregated list of
+        ``{level, count, color}`` dicts (only levels with count > 0, sorted by level).
+
+        This is intentionally keyword-based (no extra LLM call) so it's fast.
+        """
+        if not content:
+            return []
+
+        # Build a flat reverse index: keyword → level
+        kw_to_level: Dict[str, str] = {}
+        for level, kws in ReviewerAgent._BLOOM_KEYWORDS.items():
+            for kw in kws:
+                kw_to_level[kw] = level
+
+        # Split into candidate sentences / question stems
+        import re
+        lines = re.split(r"[\n.?!]", content.lower())
+
+        counts: Dict[str, int] = {}
+        for line in lines:
+            for kw, level in kw_to_level.items():
+                if kw in line:
+                    counts[level] = counts.get(level, 0) + 1
+                    break   # one level per line
+
+        # Build result list sorted by taxonomy order
+        taxonomy_order = ["Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"]
+        result = []
+        for level in taxonomy_order:
+            count = counts.get(level, 0)
+            if count > 0:
+                result.append({
+                    "level": level,
+                    "count": count,
+                    "color": ReviewerAgent._BLOOM_COLORS[level],
+                })
+
+        return result
+
     @staticmethod
     async def _generate_suggestions(
         generated_content: str,

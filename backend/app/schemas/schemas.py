@@ -27,6 +27,11 @@ class UserResponse(UserBase):
 
 
 # Auth Schemas
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -47,6 +52,7 @@ class DocumentResponse(BaseModel):
     id: str
     filename: str
     file_type: str
+    subject: Optional[str] = None
     chunks_count: int
     created_at: datetime
     updated_at: datetime
@@ -84,6 +90,13 @@ class MessageRequest(BaseModel):
     difficulty: Optional[str] = None
 
 
+class BloomTag(BaseModel):
+    """Single entry in the Bloom's taxonomy distribution for a generated response."""
+    level: str           # "Remember" | "Understand" | "Apply" | "Analyze" | "Evaluate" | "Create"
+    count: int           # number of questions/items at this level
+    color: str           # tailwind color name used for badge rendering
+
+
 class RoutedMessageResponse(BaseModel):
     conversation_id: str
     is_new_conversation: bool
@@ -94,6 +107,7 @@ class RoutedMessageResponse(BaseModel):
     detection_method: Optional[str] = None
     content: str
     title: Optional[str] = None
+    bloom_tags: Optional[List[BloomTag]] = None   # Bloom's taxonomy distribution
 
 
 # Feedback Schemas
@@ -145,6 +159,7 @@ class ConversationResponse(BaseModel):
     primary_subject: Optional[str] = None
     primary_topic: Optional[str] = None
     all_topics: Optional[str] = None
+    folder_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     last_edited: Optional[datetime] = None
@@ -221,6 +236,7 @@ class GenerationResponse(BaseModel):
     generation_attempts: int
     analysis: Optional[Dict[str, Any]] = None
     review: Optional[Dict[str, Any]] = None
+    bloom_tags: Optional[List[BloomTag]] = None
 
 
 # Vector Search Schemas
@@ -235,3 +251,86 @@ class VectorSearchResult(BaseModel):
     content: str
     metadata: Dict[str, Any]
     relevance_score: Optional[float] = None
+
+
+# Folder Schemas - para organizar conversaciones por tema
+# HITL Schemas
+
+class MessageRateRequest(BaseModel):
+    """Rate a single assistant message: +1 (helpful) or -1 (not helpful)."""
+    rating: int          # must be +1 or -1
+    feedback_text: Optional[str] = None
+
+
+class MessageRateResponse(BaseModel):
+    rating_id: str
+    message_id: str
+    rating: int
+    recorded: bool
+
+
+class ReclassifyRequest(BaseModel):
+    """Correct the AI-inferred subject of a conversation."""
+    subject: str                      # user's corrected subject
+    folder_id: Optional[str] = None   # explicit folder; if omitted, auto-resolve
+
+
+class ReclassifyResponse(BaseModel):
+    conversation_id: str
+    old_subject: Optional[str] = None
+    new_subject: str
+    folder_id: Optional[str] = None
+    title: str
+
+
+class RefineRequest(BaseModel):
+    """
+    Body for the HITL message-refine endpoint.
+
+    The professor edits the AI's output directly, then sends both versions.
+    The LLM is asked to produce a final polished version that:
+      - Keeps all intentional changes the professor made
+      - Preserves academic formatting and quality
+    """
+    edited_content: str   # professor's edited version of the message
+
+
+class RefineResponse(BaseModel):
+    """New assistant message produced by the refinement loop."""
+    message_id: str
+    conversation_id: str
+    content: str
+    content_type: Optional[str] = None
+    timestamp: str
+
+
+class FolderBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    color: str = "#3B82F6"
+    icon: str = "folder"
+    is_default: bool = False
+
+
+class FolderCreate(FolderBase):
+    pass
+
+
+class FolderUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+    order: Optional[int] = None
+    is_default: Optional[bool] = None
+
+
+class FolderResponse(FolderBase):
+    id: str
+    user_id: str
+    order: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

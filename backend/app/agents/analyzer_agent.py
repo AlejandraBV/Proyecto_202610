@@ -46,7 +46,17 @@ class AnalyzerAgent:
             inferred_difficulty = AnalyzerAgent._infer_difficulty(user_prompt, user_level)
 
             rag_context = ""
-            if document_context or user_prompt:
+            if document_context:
+                # Explicit document provided — use it directly as primary context.
+                # Truncate to 8000 chars so it fits comfortably in the prompt.
+                rag_context = (
+                    "=== DOCUMENT CONTEXT (use this as the primary source) ===\n"
+                    + document_context[:8000]
+                    + "\n=== END OF DOCUMENT CONTEXT ==="
+                )
+                logger.info("Using explicit document_context (%d chars)", len(document_context))
+            elif user_prompt:
+                # No explicit document — fall back to vector search
                 rag_context = await VectorDatabaseService.get_context_for_query(
                     user_query=user_prompt or topic,
                     subject=subject,

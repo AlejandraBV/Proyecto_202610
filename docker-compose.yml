@@ -1,60 +1,85 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database (Primary data store)
   postgres:
     image: postgres:16-alpine
     container_name: academic_generator_postgres
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: academic_generator
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-academic_generator}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-academic_generator}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - academic_network
+    restart: unless-stopped
 
-  # FastAPI Backend
+  # FastAPI Backend (Main API server)
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: academic_generator_backend
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://user:password@postgres:5432/academic_generator
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-academic_generator}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-alejandria-488623}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-us-central1}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials.json
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-this-in-production}
+      CHROMA_DIR: /app/chromadb_data
+      DEBUG: ${DEBUG:-False}
     volumes:
-      - .:/app
-      - ./chromadb_data:/app/chromadb_data
+      - ./backend:/app
+      - chromadb_data:/app/chromadb_data
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - academic_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Frontend (optional, for development)
+  # Next.js Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: academic_generator_frontend
+    command: npm run dev
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://backend:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NODE_ENV: development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
     networks:
       - academic_network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
+  chromadb_data:
+    driver: local
 
 networks:
   academic_network:
